@@ -1,0 +1,129 @@
+\documentclass{article}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{proof}
+\usepackage{stmaryrd}
+\usepackage{algorithm, algpseudocode}
+
+\title{language for protocol}
+	
+\begin{document}
+\maketitle
+
+\section{A language for actors}
+
+Expressions:
+\[ e ::= n \mid b \mid e \oplus e. \]
+
+Types for expressions will be required to be finite:
+\[ \tau ::= \mathbb{Z}_{q} \mid \textsf{bool} \mid \tau \times \tau \mid \dots. \]
+
+Let $\mathcal{I} = \{i_1, i_2, \dots \}$ be a set of \emph{interface labels} with associated types $\tau_i$. Let $\textit{Dist}$ and $\textit{Var}$ be supplies of labels for distributions and variables. Each distribution $D \in \textit{Dist}$ is assigned a type $\tau_D$ of the form $\tau_1 \to \dots \to \tau_k \to \mathcal{D}(\tau)$. (Function and distribution types do not appear elsewhere in the language.) Messages are pairs of values and interface labels.
+
+
+Syntax for actors:
+
+\begin{alignat*}{2}
+    \text{decl} &::=\ && \epsilon \mid \text{handler};\ \text{decl} \\
+    \text{handler} &::=\ &&\textsf{onInput}\ i\ v\ c\ \text{ where $i \in \mathcal{I}$, $v \in \textsf{Var}$} \\
+    c &::=\ &&\textsf{if}\ e\ c\ c \\
+    &\ \ \ \mid &&\textsf{send}\ e \to i \\
+    &\ \ \ \mid &&x \leftarrow D\ e_1\ \dots\ e_k;\ c\ \text{   where $d \in \textit{Dist}$} \\
+    &\ \ \ \mid &&x \leftarrow \textsf{get};\ c \\
+    &\ \ \ \mid &&\textsf{put}\ e;\ c
+\end{alignat*}
+
+Upon activation, actors may receive exactly one message and deliver exactly one message. Sends are guarded behind receives.
+
+\subsection{Typing}
+Let $\Gamma$ be a typing environment, containing of variable assignments $x \mapsto \tau$ as well as a type for the state $\textsf{St}(c) \mapsto \tau$. The main typing relation is then $\Gamma \vdash c$, stating that all expressions in $c$ are well typed, all samplings in $c$ are of the correct arity and type, and all stateful commands in $c$ are well-typed.
+
+Then, given a declaration $d$, write $\vdash d$ to mean that all of the commands in $d$ are well-typed, and all commands in $d$ share the same type for the state.
+
+Given a message $m = (v, i)$, write $\vdash (v,i)$ to mean $\vdash v : \tau_i$.
+
+\subsection{Interface typing}
+We have an typing relation $\vdash d : I\ O$ on declarations, where $I$ and $O$ are subsets of $\mathcal{I}$.
+
+\begin{align*}
+    &\infer{\vdash \epsilon : \varnothing\ \varnothing}{} & 
+       \infer{\vdash\ \textsf{onInput}\ i\ v\ c;\ d : I \cup \{i\}\ O \cup O'}{\vdash d : I\ O & \vdash c : O' & I \cap (O \cup O') = \varnothing} 
+\end{align*}
+
+Above $\vdash c : O$ is the typing relation defined by
+\[\infer{\vdash \textsf{send}\ e \to i: \{i\}}{}\]
+and the appropriate propogation rules.
+
+Given a declaration $d$, let $\textsf{In}(d), \textsf{Out}(d)$ be the set of input and output messages to $d$ (i.e., elements of \textit{Msg} whose interface labels agree with the $d$). Similarly, for commands $c$, let $\textsf{Out}(c)$ be the set of output interfaces of $c$.
+
+\subsection{Semantics}
+
+For each type $\tau$, we have the semantic domain $\llbracket \tau \rrbracket$.
+Let $\mathcal{D}$ be the monad of finite probability distributions. 
+A \emph{distribution environment} $\Phi$ is a mapping $D \in \textit{Dist} \to \llbracket \tau_D \rrbracket$.
+
+We may then give commands a denotational semantics $\llbracket c \rrbracket : \Phi \to \textsf{St}(c) \to \mathcal{D}(\textsf{Out}(c) \times \textsf{St}(c))$. 
+Then, we may lift to declarations in order to obtain the semantics $\llbracket d \rrbracket : \Phi \to \textsf{In}(d) \to \textsf{St}(d) \to \mathcal{D}(\textsf{Out}(d) \times \textsf{St}(d))$. 
+
+\section{Systems}
+
+Our syntax for systems is:
+\[\text{S} ::= \text{decl} \mid \text{S}\  \text{S}. \]
+
+
+We only need one combinator: $S_1 S_2$ runs $S_1$ and $S_2$ in parallel and, if they share interface labels accordingly, these interfaces get connected together. If the interfaces of $S_1$ and $S_2$ are disjoint, then they are simply run in parallel. (In constructive crypto, there is a separate operator for parallel composition: assuming that interface labels are not reused, this is redundant.)
+
+Lift the $\textsf{St}$ typing assignment by declaring that $\textsf{St}(S_1 S_2) = \textsf{St}(S_1) \times \textsf{St}(S_2)$.
+\paragraph{Interface typing:}
+
+\[\infer{\vdash S_1 S_2 : (I_1 \cup I_2) \setminus (O_1 \cup O_2)\ (O_1 \cup O_2) \setminus (I_1 \cup I_2)}{\vdash S_1 : I_1\ O_1 & \vdash S_2 : I_2\ O_2}\]
+
+Lift the assignments $\textsf{In}$ and $\textsf{Out}$ according to the above rule. Define $\textsf{Connect}(S_1, S_2) = (\textsf{In}(S_1) \cap \textsf{Out}(S_2)) \cup (\textsf{Out}(S_1) \cap \textsf{In}(S_2))$; $\textsf{Connect}(S_1, S_2)$ are the message spaces for messages internal to $S_1$ and $S_2$. If $S_1$ and $S_2$ do not have any interfaces in common, $\textsf{Connect}(S_1, S_2)$ is empty. 
+
+Systems also implicitly come with an initialization distribution $\textsf{init}(S)$, which is a distribution $D \in \textit{Dist}$ over $\textsf{St}(S)$, which takes no arguments. This initialization distribution is lifted to compositions of systems in the obvious way.
+
+\paragraph{System semantics:}
+
+Systems are finally given the denotational semantics $\llbracket S \rrbracket : \Phi \to \textsf{In}(S) \to \textsf{St}(S) \to \mathcal{D}(\textsf{Out}(S) \times \textsf{St}(S))_\bot$. (We adjoin $\bot$ because systems may diverge.)
+This is defined to be $\llbracket S_1 S_2 \rrbracket \phi m (s_1, s_2) := \textsf{Run}_{S_1, S_2}\ m\ (s_1, s_2)$, where $$\textsf{Run}_{S_1, S_2} : \textsf{In}(S_1 S_2) \cup \textsf{Connect}(S_1, S_2) \to \textsf{St}(S_1 S_2) \to \mathcal{D}(\textsf{Out}(S_1 S_2) \times \textsf{St}(S_1 S_2))_\bot$$ is given by:
+
+\begin{algorithm}
+\begin{algorithmic}[1]
+    \If {$m \in \textsf{In}(S_1)$} 
+        \State $(m', s_1') \leftarrow \llbracket s_1 \rrbracket\ \phi\ m\ s_1$
+        \If {$m' \in \textsf{Out}(S_1 S_2)$} \
+            \State Return $(m', (s_1', s_2))$
+        \Else 
+            \State ($m \in \textsf{Connect}(S_1, S_2)$) 
+            \State Return $\textsf{Run}\ m'\ (s_1', s_2)$
+        \EndIf
+    \Else
+        \State ($m \in \textsf{In}(S_2)$)
+        \State (This case is symmetric)
+    \EndIf
+\end{algorithmic}
+\end{algorithm}
+
+The above is written monadically: line two is implicitly using the $\textsf{bind}$ operation of $\textsf{D}$. The above algorithm continues to deliver the current message until an external interface is reached.
+
+
+\paragraph{Equivalence of systems}
+
+Below is a possible notion of bisimilarity of systems. Given two systems $S$ and $T$ such that $\textsf{In}(S) = \textsf{In}(T) := \textsf{In}$ and $\textsf{Out}(S) = \textsf{Out}(T) := \textsf{Out}$, represented by their transistion functions $\delta_S = \textsf{In} \times \textsf{St}(S) \to \mathcal{D} (\textsf{Out} \times \textsf{St}(S))$, and similarly for $T$ (fixing a particular distribution environment).
+Since $\textsf{St}(S)$ is guaranteed to be finite, we may lift $\delta_S$ to operate on distributions of states, rather than single states.
+
+Given a distribution $D$ over pairs, let $\pi_1 D$ be the left projection of $D$, and for $x \in \textsf{supp}(\pi_1 D)$, let $D_{|x}$ be the conditional distribution over the right projection of $D$, where the left component is required to be equal to $x$.
+
+Then, for two distributions $\mu$ over $\textsf{St}(S)$ and $\eta$ over $\textsf{St}(T)$, define
+\[ \mu \sim_1 \eta \text { if } \forall m \in \textsf{In}, \pi_1 (\delta_S\ m\ \mu) \equiv \pi_1 (\delta_T\ m\ \eta)\]
+and
+\[
+    \mu \sim_{k+1} \eta \text { if } \mu \sim_1 \eta \text{ and } \forall m' \in \textsf{supp} (\pi_1 (\delta_S\ m\ \mu)), (\delta_S\ m\ \mu)_{|m'} \sim_k (\delta_T\ m\ \eta)_{|m'}.
+\]
+
+Since $\mu \sim_1 \eta$, both conditional distributions on the right hand side are well-defined.
+
+Finally, let $\sim$ be $\lim_i \sim_i$. Two systems are \emph{equivalent} if $\textsf{init}(S) \sim \textsf{init}(T)$.
+
+
+
+\end{document}
