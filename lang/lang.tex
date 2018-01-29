@@ -108,22 +108,13 @@ The above is written monadically: line two is implicitly using the $\textsf{bind
 
 \paragraph{Equivalence of systems}
 
-Below is a possible notion of bisimilarity of systems. Given two systems $S$ and $T$ such that $\textsf{In}(S) = \textsf{In}(T) := \textsf{In}$ and $\textsf{Out}(S) = \textsf{Out}(T) := \textsf{Out}$, represented by their transistion functions $\delta_S = \textsf{In} \times \textsf{St}(S) \to \mathcal{D} (\textsf{Out} \times \textsf{St}(S))$, and similarly for $T$ (fixing a particular distribution environment).
-Since $\textsf{St}(S)$ is guaranteed to be finite, we may lift $\delta_S$ to operate on distributions of states, rather than single states.
+Systems $S$ and $T$ are represented by their transition functions $\delta_S = \textsf{St}(S) \to \textsf{In} \to \mathcal{D} (\textsf{Out} \times \textsf{St}(S))$, and similarly for $T$. These transition functions are coalgebras over $\mathcal{F}(X) = \textsf{In} \to \mathcal{D} (\textsf{Out} \times X$. We first form the coproduct of these two coalgebras, which is a transition function over state space $\textsf{St}(S) + \textsf{St}(T)$ which takes $S$-states to $S$-distributions, and similarly for $T$.
 
-Given a distribution $D$ over pairs, let $\pi_1 D$ be the left projection of $D$, and for $x \in \textsf{supp}(\pi_1 D)$, let $D_{|x}$ be the conditional distribution over the right projection of $D$, where the left component is required to be equal to $x$.
+Now, we ask whether two initial states are bisimilar. 
+Let $S$ be the state space for a $\mathcal{F}$-coalgebra. Then, for a state $s$, write $s \xrightarrow{m} \mu$ to mean $\mu := \delta_S (s,m)$.
+Given an $\mathcal{F}$-coalgebra over state space $S$, we say that an equivalence relation $\sim$ is a \emph{bisimulation} if for any $s \sim t$,
+\[ \forall m, \forall C \in S / \sim, \text{ if } s \xrightarrow{m} \mu \text{ and } t \xrightarrow{m} \eta \text{ then }  \forall m', \mu(m',C) = \eta(m',C),\]
 
-Then, for two distributions $\mu$ over $\textsf{St}(S)$ and $\eta$ over $\textsf{St}(T)$, define
-\[ \mu \sim_1 \eta \text { if } \forall m \in \textsf{In}, \pi_1 (\delta_S\ m\ \mu) \equiv \pi_1 (\delta_T\ m\ \eta)\]
-and
-\[
-    \mu \sim_{k+1} \eta \text { if } \mu \sim_1 \eta \text{ and } \forall m' \in \textsf{supp} (\pi_1 (\delta_S\ m\ \mu)), (\delta_S\ m\ \mu)_{|m'} \sim_k (\delta_T\ m\ \eta)_{|m'}.
-\]
-
-Since $\mu \sim_1 \eta$, both conditional distributions on the right hand side are well-defined.
-
-Finally, let $\sim$ be $\lim_i \sim_i$. Two systems are \emph{equivalent} if $\textsf{init}(S) \sim \textsf{init}(T)$.
-
-
+where $\mu(m',C)$ is the probability that $\mu$ outputs a pair $m'', s'$ such that $m'' = m'$ and $s' \in C$.
 
 \end{document}
