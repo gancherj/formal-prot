@@ -67,15 +67,15 @@ Then, we may lift to declarations in order to obtain the semantics $\llbracket d
 \section{Systems}
 
 Our syntax for systems is:
-\[\text{S} ::= \text{decl} \mid \text{S}\  \text{S}. \]
+\[\text{S} ::= \text{decl} \mid \text{S}\ || \text{S}. \]
 
 
-We only need one combinator: $S_1 S_2$ runs $S_1$ and $S_2$ in parallel and, if they share interface labels accordingly, these interfaces get connected together. If the interfaces of $S_1$ and $S_2$ are disjoint, then they are simply run in parallel. (In constructive crypto, there is a separate operator for parallel composition: assuming that interface labels are not reused, this is redundant.)
+We only need one combinator: $S_1 || S_2$ runs $S_1$ and $S_2$ in parallel and, if they share interface labels accordingly, these interfaces get connected together. If the interfaces of $S_1$ and $S_2$ are disjoint, then they are simply run in parallel. (In constructive crypto, there is a separate operator for parallel composition: assuming that interface labels are not reused, this is redundant.)
 
-Lift the $\textsf{St}$ typing assignment by declaring that $\textsf{St}(S_1 S_2) = \textsf{St}(S_1) \times \textsf{St}(S_2)$.
+Lift the $\textsf{St}$ typing assignment by declaring that $\textsf{St}(S_1 || S_2) = \textsf{St}(S_1) \times \textsf{St}(S_2)$.
 \paragraph{Interface typing:}
 
-\[\infer{\vdash S_1 S_2 : (I_1 \cup I_2) \setminus (O_1 \cup O_2)\ (O_1 \cup O_2) \setminus (I_1 \cup I_2)}{\vdash S_1 : I_1\ O_1 & \vdash S_2 : I_2\ O_2}\]
+\[\infer{\vdash S_1 || S_2 : (I_1 \cup I_2) \setminus (O_1 \cup O_2)\ (O_1 \cup O_2) \setminus (I_1 \cup I_2)}{\vdash S_1 : I_1\ O_1 & \vdash S_2 : I_2\ O_2}\]
 
 Lift the assignments $\textsf{In}$ and $\textsf{Out}$ according to the above rule. Define $\textsf{Connect}(S_1, S_2) = (\textsf{In}(S_1) \cap \textsf{Out}(S_2)) \cup (\textsf{Out}(S_1) \cap \textsf{In}(S_2))$; $\textsf{Connect}(S_1, S_2)$ are the message spaces for messages internal to $S_1$ and $S_2$. If $S_1$ and $S_2$ do not have any interfaces in common, $\textsf{Connect}(S_1, S_2)$ is empty. 
 
@@ -84,7 +84,7 @@ Systems also implicitly come with an initialization distribution $\textsf{init}(
 \paragraph{System semantics:}
 
 Systems are finally given the denotational semantics $\llbracket S \rrbracket : \Phi \to \textsf{In}(S) \to \textsf{St}(S) \to \mathcal{D}(\textsf{Out}(S) \times \textsf{St}(S))_\bot$. (We adjoin $\bot$ because systems may diverge.)
-This is defined to be $\llbracket S_1 S_2 \rrbracket \phi m (s_1, s_2) := \textsf{Run}_{S_1, S_2}\ m\ (s_1, s_2)$, where $$\textsf{Run}_{S_1, S_2} : \textsf{In}(S_1 S_2) \cup \textsf{Connect}(S_1, S_2) \to \textsf{St}(S_1 S_2) \to \mathcal{D}(\textsf{Out}(S_1 S_2) \times \textsf{St}(S_1 S_2))_\bot$$ is given by:
+This is defined to be $\llbracket S_1 || S_2 \rrbracket \phi m (s_1, s_2) := \textsf{Run}_{S_1, S_2}\ m\ (s_1, s_2)$, where $$\textsf{Run}_{S_1, S_2} : \textsf{In}(S_1 S_2) \cup \textsf{Connect}(S_1, S_2) \to \textsf{St}(S_1 S_2) \to \mathcal{D}(\textsf{Out}(S_1 S_2) \times \textsf{St}(S_1 S_2))_\bot$$ is given by:
 
 \begin{algorithm}
 \begin{algorithmic}[1]
@@ -116,5 +116,33 @@ Given an $\mathcal{F}$-coalgebra over state space $S$, we say that an equivalenc
 \[ \forall m, \forall C \in S / \sim, \text{ if } s \xrightarrow{m} \mu \text{ and } t \xrightarrow{m} \eta \text{ then }  \forall m', \mu(m',C) = \eta(m',C),\]
 
 where $\mu(m',C)$ is the probability that $\mu$ outputs a pair $m'', s'$ such that $m'' = m'$ and $s' \in C$.
+
+\paragraph{Problem 1.}
+
+Given a system $S$ composed of subsystems $S_1, \dots, S_n$, its transition function $\delta_S$ has more structure than listed above, in that it arises from a sequences of combinations of transitions $\delta_{S_1}, \dots, \delta_{S_n}$. 
+
+Indeed, there is a notion of ``small-step'' protocol semantics, where each $m$ is sent to its appropriate handler $\delta_{S_k}$, and the corresponding output distribution is over pairs of states of $S_k$ and messages that $S_k$ can send. These messages are then rerouted to various parties of $S$ until a message is produced that is addressed to someone outside of $S$.
+
+Is there a suitable bisimulation notion that is appropriately modular with respect to the above structure?
+
+\paragraph{Problem 2.}
+
+It is likely the case that most protocols being run, while over joint state spaces of very large sizes, can be appropriately refined to protocols with relatively smaller state spaces. For example, if I am holding a 32-bit integer but only care about the first two bits, then I can refine this protocol to one where I am only holding two bits. 
+
+What is the appropriate refinement notion, given the abstract semantics of $\delta_S$, such that it is compatible with bisimularity?
+
+\paragraph{Problem 3.}
+
+How does one tackle cryptographic arguments? Bisimularity only captures exact equivalence. Two options are:
+\begin{enumerate}
+    \item Leave cryptographic arguments out of bisimularity, and keep it exact. Instead, have a trace semantics that allows you to securely transform protocols between cryptographic ``worlds'' (i.e., real encryption and symbolic ideal encryption). Then, bisimularity is carried out after these steps have been taken. (This is what Backes does.)
+    \item Have a notion of approximate bisimularity which allows one to reason about cryptographic ``worlds'' directly in the bisimularity argument.
+\end{enumerate}
+
+\paragraph{Problem 4.}
+
+Given an answer to Problem 3, can we reason modularly about protocols by taking advantage of congruences? Given an appropriate distance pseudometric $d(\cdot, \cdot)$ on systems, could we prove that $d(S || S', T || T') \leq d(S,T) + d(S', T')$?
+
+
 
 \end{document}
