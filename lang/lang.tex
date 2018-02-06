@@ -1,148 +1,28 @@
+
 \documentclass{article}
 \usepackage{amsmath, amssymb, amsthm}
 \usepackage{proof}
 \usepackage{stmaryrd}
 \usepackage{algorithm, algpseudocode}
 
-\title{language for protocol}
-	
+\title {basic protocol formalism}
 \begin{document}
 \maketitle
 
-\section{A language for actors}
+Our data types will be required to be finite:
 
-Expressions:
-\[ e ::= n \mid b \mid e \oplus e. \]
-
-Types for expressions will be required to be finite:
 \[ \tau ::= \mathbb{Z}_{q} \mid \textsf{bool} \mid \tau \times \tau \mid \dots. \]
 
-Let $\mathcal{I} = \{i_1, i_2, \dots \}$ be a set of \emph{interface labels} with associated types $\tau_i$. Let $\textit{Dist}$ and $\textit{Var}$ be supplies of labels for distributions and variables. Each distribution $D \in \textit{Dist}$ is assigned a type $\tau_D$ of the form $\tau_1 \to \dots \to \tau_k \to \mathcal{D}(\tau)$. (Function and distribution types do not appear elsewhere in the language.) Messages are pairs of values and interface labels.
+Additionally, assume some message spaces $I$ and $O$. (A possible choice for this is to have each party be indexed by a natural number, and let $I$ and $O$ be $\Sigma_{i \in \mathcal{I}} F(i)$, where $\mathcal{I}$ is a finite set of natural numbers, and $F$ is a function from natural numbers to message types $\tau$.)
 
+Then, a process with state space $S$ is defined to be a pair $S \times (S \to I \to \mathcal{D}(S \times O))$.
 
-Syntax for actors:
+We may ask if two processes $P$, $Q$ are behaviorally equivalent by first forming their disjoint union, where states of the disjoint union are pairs, and the handler pattern matches on the state to decide which handler to run. Then, we ask if the initial state of $P$ is bisimilar to the initial state of $Q$.
 
-\begin{alignat*}{2}
-    \text{decl} &::=\ && \epsilon \mid \text{handler};\ \text{decl} \\
-    \text{handler} &::=\ &&\textsf{onInput}\ i\ v\ c\ \text{ where $i \in \mathcal{I}$, $v \in \textsf{Var}$} \\
-    c &::=\ &&\textsf{if}\ e\ c\ c \\
-    &\ \ \ \mid &&\textsf{send}\ e \to i \\
-    &\ \ \ \mid &&x \leftarrow D\ e_1\ \dots\ e_k;\ c\ \text{   where $d \in \textit{Dist}$} \\
-    &\ \ \ \mid &&x \leftarrow \textsf{get};\ c \\
-    &\ \ \ \mid &&\textsf{put}\ e;\ c
-\end{alignat*}
+For a state $s$ in some process, write $s \xrightarrow{m} \mu$ to mean $\mu := \delta (s,m)$, where $\delta$ is the handler for that process. Then, we say that a relation $\sim$ over states is a \emph{bisimulation} if for any $s \sim t$,
 
-Upon activation, actors may receive exactly one message and deliver exactly one message. Sends are guarded behind receives.
-
-\subsection{Typing}
-Let $\Gamma$ be a typing environment, containing of variable assignments $x \mapsto \tau$ as well as a type for the state $\textsf{St}(c) \mapsto \tau$. The main typing relation is then $\Gamma \vdash c$, stating that all expressions in $c$ are well typed, all samplings in $c$ are of the correct arity and type, and all stateful commands in $c$ are well-typed.
-
-Then, given a declaration $d$, write $\vdash d$ to mean that all of the commands in $d$ are well-typed, and all commands in $d$ share the same type for the state.
-
-Given a message $m = (v, i)$, write $\vdash (v,i)$ to mean $\vdash v : \tau_i$.
-
-\subsection{Interface typing}
-We have an typing relation $\vdash d : I\ O$ on declarations, where $I$ and $O$ are subsets of $\mathcal{I}$.
-
-\begin{align*}
-    &\infer{\vdash \epsilon : \varnothing\ \varnothing}{} & 
-       \infer{\vdash\ \textsf{onInput}\ i\ v\ c;\ d : I \cup \{i\}\ O \cup O'}{\vdash d : I\ O & \vdash c : O' & I \cap (O \cup O') = \varnothing} 
-\end{align*}
-
-Above $\vdash c : O$ is the typing relation defined by
-\[\infer{\vdash \textsf{send}\ e \to i: \{i\}}{}\]
-and the appropriate propogation rules.
-
-Given a declaration $d$, let $\textsf{In}(d), \textsf{Out}(d)$ be the set of input and output messages to $d$ (i.e., elements of \textit{Msg} whose interface labels agree with the $d$). Similarly, for commands $c$, let $\textsf{Out}(c)$ be the set of output interfaces of $c$.
-
-\subsection{Semantics}
-
-For each type $\tau$, we have the semantic domain $\llbracket \tau \rrbracket$.
-Let $\mathcal{D}$ be the monad of finite probability distributions. 
-A \emph{distribution environment} $\Phi$ is a mapping $D \in \textit{Dist} \to \llbracket \tau_D \rrbracket$.
-
-We may then give commands a denotational semantics $\llbracket c \rrbracket : \Phi \to \textsf{St}(c) \to \mathcal{D}(\textsf{Out}(c) \times \textsf{St}(c))$. 
-Then, we may lift to declarations in order to obtain the semantics $\llbracket d \rrbracket : \Phi \to \textsf{In}(d) \to \textsf{St}(d) \to \mathcal{D}(\textsf{Out}(d) \times \textsf{St}(d))$. 
-
-\section{Systems}
-
-Our syntax for systems is:
-\[\text{S} ::= \text{decl} \mid \text{S}\ || \text{S}. \]
-
-
-We only need one combinator: $S_1 || S_2$ runs $S_1$ and $S_2$ in parallel and, if they share interface labels accordingly, these interfaces get connected together. If the interfaces of $S_1$ and $S_2$ are disjoint, then they are simply run in parallel. (In constructive crypto, there is a separate operator for parallel composition: assuming that interface labels are not reused, this is redundant.)
-
-Lift the $\textsf{St}$ typing assignment by declaring that $\textsf{St}(S_1 || S_2) = \textsf{St}(S_1) \times \textsf{St}(S_2)$.
-\paragraph{Interface typing:}
-
-\[\infer{\vdash S_1 || S_2 : (I_1 \cup I_2) \setminus (O_1 \cup O_2)\ (O_1 \cup O_2) \setminus (I_1 \cup I_2)}{\vdash S_1 : I_1\ O_1 & \vdash S_2 : I_2\ O_2}\]
-
-Lift the assignments $\textsf{In}$ and $\textsf{Out}$ according to the above rule. Define $\textsf{Connect}(S_1, S_2) = (\textsf{In}(S_1) \cap \textsf{Out}(S_2)) \cup (\textsf{Out}(S_1) \cap \textsf{In}(S_2))$; $\textsf{Connect}(S_1, S_2)$ are the message spaces for messages internal to $S_1$ and $S_2$. If $S_1$ and $S_2$ do not have any interfaces in common, $\textsf{Connect}(S_1, S_2)$ is empty. 
-
-Systems also implicitly come with an initialization distribution $\textsf{init}(S)$, which is a distribution $D \in \textit{Dist}$ over $\textsf{St}(S)$, which takes no arguments. This initialization distribution is lifted to compositions of systems in the obvious way.
-
-\paragraph{System semantics:}
-
-Systems are finally given the denotational semantics $\llbracket S \rrbracket : \Phi \to \textsf{In}(S) \to \textsf{St}(S) \to \mathcal{D}(\textsf{Out}(S) \times \textsf{St}(S))_\bot$. (We adjoin $\bot$ because systems may diverge.)
-This is defined to be $\llbracket S_1 || S_2 \rrbracket \phi m (s_1, s_2) := \textsf{Run}_{S_1, S_2}\ m\ (s_1, s_2)$, where $$\textsf{Run}_{S_1, S_2} : \textsf{In}(S_1 S_2) \cup \textsf{Connect}(S_1, S_2) \to \textsf{St}(S_1 S_2) \to \mathcal{D}(\textsf{Out}(S_1 S_2) \times \textsf{St}(S_1 S_2))_\bot$$ is given by:
-
-\begin{algorithm}
-\begin{algorithmic}[1]
-    \If {$m \in \textsf{In}(S_1)$} 
-        \State $(m', s_1') \leftarrow \llbracket s_1 \rrbracket\ \phi\ m\ s_1$
-        \If {$m' \in \textsf{Out}(S_1 S_2)$} \
-            \State Return $(m', (s_1', s_2))$
-        \Else 
-            \State ($m \in \textsf{Connect}(S_1, S_2)$) 
-            \State Return $\textsf{Run}\ m'\ (s_1', s_2)$
-        \EndIf
-    \Else
-        \State ($m \in \textsf{In}(S_2)$)
-        \State (This case is symmetric)
-    \EndIf
-\end{algorithmic}
-\end{algorithm}
-
-The above is written monadically: line two is implicitly using the $\textsf{bind}$ operation of $\textsf{D}$. The above algorithm continues to deliver the current message until an external interface is reached.
-
-
-\paragraph{Equivalence of systems}
-
-Systems $S$ and $T$ are represented by their transition functions $\delta_S = \textsf{St}(S) \to \textsf{In} \to \mathcal{D} (\textsf{Out} \times \textsf{St}(S))$, and similarly for $T$. These transition functions are coalgebras over $\mathcal{F}(X) = \textsf{In} \to \mathcal{D} (\textsf{Out} \times X$. We first form the coproduct of these two coalgebras, which is a transition function over state space $\textsf{St}(S) + \textsf{St}(T)$ which takes $S$-states to $S$-distributions, and similarly for $T$.
-
-Now, we ask whether two initial states are bisimilar. 
-Let $S$ be the state space for a $\mathcal{F}$-coalgebra. Then, for a state $s$, write $s \xrightarrow{m} \mu$ to mean $\mu := \delta_S (s,m)$.
-Given an $\mathcal{F}$-coalgebra over state space $S$, we say that an equivalence relation $\sim$ is a \emph{bisimulation} if for any $s \sim t$,
 \[ \forall m, \forall C \in S / \sim, \text{ if } s \xrightarrow{m} \mu \text{ and } t \xrightarrow{m} \eta \text{ then }  \forall m', \mu(m',C) = \eta(m',C),\]
 
 where $\mu(m',C)$ is the probability that $\mu$ outputs a pair $m'', s'$ such that $m'' = m'$ and $s' \in C$.
-
-\paragraph{Problem 1.}
-
-Given a system $S$ composed of subsystems $S_1, \dots, S_n$, its transition function $\delta_S$ has more structure than listed above, in that it arises from a sequences of combinations of transitions $\delta_{S_1}, \dots, \delta_{S_n}$. 
-
-Indeed, there is a notion of ``small-step'' protocol semantics, where each $m$ is sent to its appropriate handler $\delta_{S_k}$, and the corresponding output distribution is over pairs of states of $S_k$ and messages that $S_k$ can send. These messages are then rerouted to various parties of $S$ until a message is produced that is addressed to someone outside of $S$.
-
-Is there a suitable bisimulation notion that is appropriately modular with respect to the above structure?
-
-\paragraph{Problem 2.}
-
-It is likely the case that most protocols being run, while over joint state spaces of very large sizes, can be appropriately refined to protocols with relatively smaller state spaces. For example, if I am holding a 32-bit integer but only care about the first two bits, then I can refine this protocol to one where I am only holding two bits. 
-
-What is the appropriate refinement notion, given the abstract semantics of $\delta_S$, such that it is compatible with bisimularity?
-
-\paragraph{Problem 3.}
-
-How does one tackle cryptographic arguments? Bisimularity only captures exact equivalence. Two options are:
-\begin{enumerate}
-    \item Leave cryptographic arguments out of bisimularity, and keep it exact. Instead, have a trace semantics that allows you to securely transform protocols between cryptographic ``worlds'' (i.e., real encryption and symbolic ideal encryption). Then, bisimularity is carried out after these steps have been taken. (This is what Backes does.)
-    \item Have a notion of approximate bisimularity which allows one to reason about cryptographic ``worlds'' directly in the bisimularity argument.
-\end{enumerate}
-
-\paragraph{Problem 4.}
-
-Given an answer to Problem 3, can we reason modularly about protocols by taking advantage of congruences? Given an appropriate distance pseudometric $d(\cdot, \cdot)$ on systems, could we prove that $d(S || S', T || T') \leq d(S,T) + d(S', T')$?
-
-
 
 \end{document}
