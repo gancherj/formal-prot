@@ -1,59 +1,53 @@
-Require List.
-Module L := List.
 
-Set Implicit Arguments.
+Require Import Arith.
+Require Import Ascii.
+Require Import String.
+Require Import List.
 
-Section GenComonad.
+Definition Id := string.
+Definition eq_Id := string_dec.
 
-Class Monad {M : Type -> Type} := {
-  ret : forall {a}, a -> M a;
-  bind : forall {a b}, M a -> (a -> M b) -> M b
-}.
+Module Type LANG.
+  Parameter Val : Type.
+  Definition St := Id -> Val.
+  Parameter Com : Type.
+  (* For now, assume language is total, and not defined over any effects. *)
+  Parameter denote : Com -> St -> (Id -> Val) -> St * (Id -> Val).
+End LANG.
 
-(* Config would be a tuple of variables local to each process, along with buffers between each process. I.e., a global state.*)
-Variable Config : Type.
+Module Type MPS (L : LANG).
+  Parameter Parties : list (string * L.Com).
+  Parameter wf_Parties : forall p1 p2, In p1 Parties -> In p2 Parties -> p1 <> p2 -> (fst p1) <> (fst p2).
+  Definition GSt := Id -> L.St.
+  Definition update_Gst (i : Id) (s : L.St) (gs : GSt) := fun j => if eq_Id j i then s else gs j.
 
-(* Com would be a (perhaps security-typed) language with send and receive actions, which alter the buffers in the configuration. *)
-(* We may use information flow techniques to soundly model cryptographic primitives. *)
-Variable Com : Type.
-Variable n : nat.
+(* GB i j = messages from i to j *)
+  Definition GBuf := Id -> Id -> L.Val.
+  (* messages to i *)
+  Definition ins (i : Id) (g : GBuf) : Id -> L.Val := fun j => g j i.
+  (* messages from i *)
+  Definition outs (i : Id) (g : GBuf) : Id -> L.Val := fun j => g i j.
 
-(* The parties in the protocol. *)
-Variable Ps : list Com.
+  Definition GTrans (gst : GSt) (buf : GBuf) (c : string * L.Com) : GSt * GBuf := 
+    let p := L.denote (snd c) (gst (fst c)) (ins (fst c) buf) in
+    (update_Gst (fst c) (fst p) gst, fun i' j => if eq_Id i' (fst c) then (snd p) j else buf i' j).
 
-(* Requiring that input commands are well-typed restricts what the adversary may do. (i.e., cannot decrypt a ciphertext it doesn't (statically) have a public key for). *)
-Variable well_typed_com : Com -> Prop.
+  Definition round_robin (g : GSt * GBuf) (cs : list (string * L.Com)) : GSt * GBuf :=
+    fold_left (fun acc c => GTrans (fst acc) (snd acc) c) cs g.
 
-(* The language semantics can be parameterized over a monad. *)
-Variable m : Type -> Type.
-Variable M_m : @Monad m.
-Variable denote : Com -> (Config -> m Config).
+  Parameter adv_Id : Id.
+  Definition C_tr (g : GSt * GBuf) (c : L.Com) : GSt * GBuf := round_robin g ((adv_Id, c) :: Parties).
 
-(* Observation function for Config. This denotes, for example, the output bit sent by the adversary. *)
-Variable Obs : Type.
-Variable obs : Config -> Obs.
+  Definition adv_Bisim_prog (R : GSt * GBuf -> GSt * GBuf -> Prop) : GSt * GBuf -> GSt * GBuf -> Prop :=
+  fun p1 p2 => R p1 p2 -> 
+    forall com,
+    let g1 := C_tr p1 com in
+    let g2 := C_tr p2 com in
+    R g1 g2 /\ (forall s, (fst g1) adv_Id s = (fst g2) adv_Id s) /\ (forall j, (snd g1) j adv_Id = (snd g2) j adv_Id).
 
-Definition mcomp {a} {b} {c} (f : a -> m b)  (g : b -> m c) : a -> m c :=
-  fun x => bind (f x) g.
+  Definition adv_Bisim (R : GSt * GBuf -> GSt * GBuf -> Prop) :=
+  forall p1 p2, R p1 p2 -> (adv_Bisim_prog R) p1 p2.
 
-Definition round_robin : Config -> m Config :=
-  L.fold_left (fun acc com => mcomp acc (denote com)) Ps ret.
-
-Definition C_tr_ (com : Com) : Config -> m (Config * Obs) :=
-  mcomp (mcomp (denote com) round_robin) (fun c => ret (c, obs c)).
-
-Definition C_tr : Config -> (Com -> m (Config * Obs)) := fun C com => C_tr_ com C.
-
-(* Lifting of the functor m \circ (_ * Obs). For example, if m is identity monad and R is (fun _ _ => True), m_obs_lift R will relate s and t if they have identical observations.*)
-Variable m_obs_lift : forall {a b}, (a -> b -> Prop) -> (m (a * Obs) -> m (b * Obs) -> Prop).
-
-(* R is a bisimulation if whenever sRt, then for every well-typed com, (C_tr s com) (Rel (m \circ (_ * Obs)) (R)) (C_tr t com). *)
-Definition Bisim (R : Config -> Config -> Prop) : Prop := forall s t,  R s t -> (forall com, well_typed_com com -> (m_obs_lift R) (C_tr s com) (C_tr t com)).
-
-Check Bisim.
-
-End GenComonad.
-  
-  
+End MPS.
 
 
