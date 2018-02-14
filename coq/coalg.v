@@ -27,7 +27,7 @@ Record Lang := mkLang {
 
 
 
-Record Party {L : Lang} {pids : list PID} := mkParty {
+Record System {L : Lang} {pids : list PID} := mkParty {
   parties : list (PID * (Com L));
   adv_id : PID;
   wf_parties : forall p1 p2, In p1 parties -> In p2 parties -> p1 <> p2 -> (fst p1) <> (fst p2)
@@ -38,7 +38,7 @@ Record Party {L : Lang} {pids : list PID} := mkParty {
 Section MPS.
   Hypothesis L : Lang.
   Hypothesis pids : list PID.
-  Hypothesis P : @Party L pids.
+  Hypothesis P : @System L pids.
 
   Definition GSt := PID -> (Id -> (Val L)).
   Definition update_Gst (i : PID) (s : Id -> (Val L)) (gs : GSt) := fun j => if eq_PID j i then s else gs j.
@@ -60,21 +60,34 @@ Section MPS.
   
 
   Definition C_tr (g : GSt * GBuf) (c : (Com L)) : GSt * GBuf := round_robin g ((adv_id P, c) :: (parties P)).
-
-  Definition adv_Bisim_prog (R : GSt * GBuf -> GSt * GBuf -> Prop) : GSt * GBuf -> GSt * GBuf -> Prop :=
-  fun p1 p2 => R p1 p2 -> 
-    forall com,
-    let g1 := C_tr p1 com in
-    let g2 := C_tr p2 com in
-    R g1 g2 /\ (forall s, (fst g1) (adv_id P) s = (fst g2) (adv_id P) s) /\ (forall j, (snd g1) j (adv_id P) = (snd g2) j (adv_id P)).
-
-  Definition adv_st_rel (g1 : GSt * GBuf) (g2 : GSt * GBuf) : Prop :=
-    (forall s, (fst g1) (adv_id P) s = (fst g2) (adv_id P) s) /\ (forall j, (snd g1) j (adv_id P) = (snd g2) j (adv_id P)).
-
-  Definition adv_Bisim :=
-  forall g1 g2, adv_st_rel g1 g2 -> (adv_Bisim_prog adv_st_rel) g1 g2.
-
 End MPS.
 
+Section NI.
+  Hypothesis L : Lang.
+  Hypothesis pids : list PID.
+  Hypothesis S1 : @System L pids.
+  Hypothesis S2 : @System L pids.
+  Check C_tr.
+  Definition C_tr_1 := @C_tr L pids S1.
+  Definition C_tr_2 := @C_tr L pids S2.
+
+  Definition GlSt := ((GSt L) * (GBuf L))%type.   
+
+  Definition adv_NI_prog (R : GlSt -> GlSt -> Prop) : GlSt -> GlSt -> Prop :=
+  fun p1 p2 => R p1 p2 -> 
+    forall com,
+    let g1 := C_tr_1 p1 com in
+    let g2 := C_tr_2 p2 com in
+    R g1 g2 /\ (forall s, (fst g1) (adv_id S1) s = (fst g2) (adv_id S2) s) /\ (forall j, (snd g1) j (adv_id S1) = (snd g2) j (adv_id S2)).
+
+  Definition adv_st_rel (g1 : GlSt) (g2 : GlSt) : Prop :=
+    (forall s, (fst g1) (adv_id S1) s = (fst g2) (adv_id S2) s) /\ (forall j, (snd g1) j (adv_id S1) = (snd g2) j (adv_id S2)).
+
+  Definition adv_NI :=
+  forall g1 g2, adv_st_rel g1 g2 -> (adv_NI_prog adv_st_rel) g1 g2.
+
+End NI.
+
+Check adv_NI.
 
 
