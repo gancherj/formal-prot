@@ -1,4 +1,5 @@
 
+
 Require Import Arith.
 Require Import Ascii.
 Require Import String.
@@ -14,8 +15,23 @@ Definition eq_PID := Nat.eq_dec.
 Class RelMonad (m : Type -> Type) := {
   ret : forall {a}, a -> m a;
   bind : forall {a b}, m a -> (a -> m b) -> m b;
+  (* Relational lifting operator. *)
   rel_lift : forall {a b} (R : a -> b -> Prop), m a -> m b -> Prop 
 }.
+
+Definition State s a := s -> (a * s)%type.
+Definition stateRet (S A : Type) (a : A) := fun (s : S) => (a , s).
+
+Definition stateBind (S A B : Type) (ma : State S A) (f : A -> State S B) : State S B := 
+  fun s =>
+    let p := ma s in
+    let p' := f (fst p) (snd p) in
+    p'.
+
+
+Definition stateRelLift (S A B : Type) (R : A -> B -> Prop) (ma : S -> A * S) (mb : S -> B * S) :=
+  forall s, R (fst (ma s)) (fst (mb s)) /\ snd (ma s) = snd (mb s).
+Instance StateM : forall s, RelMonad (State s) := {ret := stateRet _; bind := stateBind _; rel_lift := stateRelLift _}.
 
 Definition mcomp {m : Type -> Type} `{RelMonad m} {a b c} (f : a -> m b) (g : b -> m c) : a -> m c :=
   fun a => bind (f a) g.
@@ -80,6 +96,7 @@ Section NI.
     forall com,
     let g1 := C_tr_1 p1 com in
     let g2 := C_tr_2 p2 com in
+    (* TODO: Check that this is the correct relational lift. *)
     (rel_lift (fun g1 g2 => R g1 g2 /\ 
                             (forall s, (fst g1) (adv_id S1) s = (fst g2) (adv_id S2) s) /\
                             (forall j, (snd g1) j (adv_id S1) = (snd g2) j (adv_id S2))) g1 g2).
