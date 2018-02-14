@@ -12,12 +12,13 @@ Definition eq_PID := Nat.eq_dec.
 
 Module Type LANG.
   Parameter Val : Type.
-  Parameter Com : Type.
+   Parameter Com : Type.
   (* For now, assume language is total, and not defined over any effects. *)
   (* denote c : st -> inbuf -> st * outbuf *)
   Parameter denote : Com -> (Id -> Val) -> (PID -> Val) -> (Id -> Val) * (PID -> Val).
 End LANG.
 
+(* TODO: allow for a single party to stand in for multiple PIDs. *)
 Module Type MPSParties (L : LANG).
   Parameter Parties : list (PID * L.Com).
   Parameter wf_Parties : forall p1 p2, In p1 Parties -> In p2 Parties -> p1 <> p2 -> (fst p1) <> (fst p2).
@@ -53,9 +54,14 @@ Module MPS (L : LANG) (P : MPSParties L).
     let g2 := C_tr p2 com in
     R g1 g2 /\ (forall s, (fst g1) P.Adv_Id s = (fst g2) P.Adv_Id s) /\ (forall j, (snd g1) j P.Adv_Id = (snd g2) j P.Adv_Id).
 
-  Definition adv_Bisim (R : GSt * GBuf -> GSt * GBuf -> Prop) :=
-  forall p1 p2, R p1 p2 -> (adv_Bisim_prog R) p1 p2.
+  Definition adv_st_rel (g1 : GSt * GBuf) (g2 : GSt * GBuf) : Prop :=
+    (forall s, (fst g1) P.Adv_Id s = (fst g2) P.Adv_Id s) /\ (forall j, (snd g1) j P.Adv_Id = (snd g2) j P.Adv_Id).
+
+  Definition adv_Bisim :=
+  forall g1 g2, adv_st_rel g1 g2 -> (adv_Bisim_prog adv_st_rel) g1 g2.
 
 End MPS.
+
+(* TODO: define relational variant of MPS. *)
 
 
