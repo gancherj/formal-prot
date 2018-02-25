@@ -5,31 +5,78 @@
 \usepackage{stmaryrd}
 \usepackage{algorithm, algpseudocode}
 
-\title {basic protocol formalism}
+\newcommand{\Val}{\mathsf{Val}}
+\newcommand{\St}{\mathsf{St}}
+\newcommand{\InBuf}{\mathsf{InBuf}}
+\newcommand{\OutBuf}{\mathsf{OutBuf}}
+\newcommand{\PID}{\mathsf{PID}}
+\newcommand{\Var}{\mathsf{Var}}
+\newcommand{\Handler}{\mathsf{Handler}}
+\renewcommand{\list}{\mathsf{list}}
+\newcommand{\D}{\mathcal{D}}
+\newcommand{\NewEv}{\mathsf{NewEv}}
+\newcommand{\OldEv}{\mathsf{OldEv}}
+
+\title {Probabilistic Semantic Noninterference}
 \begin{document}
 \maketitle
 
-Our data types will be required to be finite:
+\section{Parties and Schedulers}
 
-\[ \tau ::= \mathbb{Z}_{q} \mid \textsf{bool} \mid \tau \times \tau \mid \dots. \]
+Assume an expression language with values in $\Val$. A \emph{state} $\St$ is a map $\Var \to \Val$, where $\Var$ is a set of variable names. 
+A \emph{buffer} is a value of type $\list (\PID \times \Val)$, where $\PID$ is a set of party names.
+Then, a \emph{handler} $P$ is a semantic function of type $\St \to \InBuf \to \D(\St \times \OutBuf)$, where $\D$ is the finitely supported distribution monad. It is the intention that $\InBuf$ only contains the set of unprocessed input messages, and $\OutBuf$ only contains the set of output messages produced during the current invocation of $P$. It is also the intention that variables in $\St$ should not be overwritten, so that the state grows monotonically.
 
-Additionally, assume some message spaces $I$ and $O$. (A possible choice for this is to have each party be indexed by a natural number, and let $I$ and $O$ be of the form $\Sigma_{i \in \mathcal{I}} F(i)$, where $\mathcal{I}$ is a finite set of natural numbers, and $F$ is a function from natural numbers to message types $\tau$.)
+(Later, $P$ can be given monadically, in which we may statically track what variables are being accessed and so on.)
 
-Then, a process with state space $S$ is defined to be a pair $S \times (S \to I \to \mathcal{D}(S \times O))$.
+A \emph{scheduler} is defined by the following syntax:
+\[ c := \textsf{Run}\ k\ @\ i;\ c \mid \textsf{stop}, \]
 
-We may ask if two processes $P$, $Q$ are behaviorally equivalent by first forming their disjoint union, where states of the disjoint union are pairs, and the handler pattern matches on the state to decide which handler to run. Then, we ask if the initial state of $P$ is bisimilar to the initial state of $Q$.
+where $k \in \Handler$ is a handler name, and $i$ is a $\PID$.
 
-For a state $s$ in some process, write $s \xrightarrow{m} \mu$ to mean $\mu := \delta (s,m)$, where $\delta$ is the handler for that process. Then, we say that a relation $\sim$ over states is a \emph{bisimulation} if for any $s \sim t$,
+\section{Semantics}
 
-\[ \forall m, \forall C \in S / \sim, \text{ if } s \xrightarrow{m} \mu \text{ and } t \xrightarrow{m} \eta \text{ then }  \forall m', \mu(m',C) = \eta(m',C),\]
+A \emph{trace} $\tau$ is a value of type $(\PID \to \St) \times \NewEv \times \OldEv$, where $\NewEv$ and $\OldEv$ are logs of the form $\list (\PID \times \PID \times \Val)$. The first component is the global state, the second component is ordered buffer of unprocessed messages, and the third component is the ordered buffer of processed messages. Given a buffer $B$, define $B_{| i}$ to be the pairs in $B$ such that the second component is equal to $i$ (preserving order).
 
-where $\mu(m',C)$ is the probability that $\mu$ outputs a pair $m'', s'$ such that $m'' = m'$ and $s' \in C$.
+Then, define our scheduler semantics $\llbracket c \rrbracket : \tau \to (\Handler \to P) \to \D(\tau)$ by
+
+\[\llbracket \textsf{Run}\ k\ @\ i; c \rrbracket (G, B_u, B_p) \mathcal{I} := \textsf{bind}\ ((\mathcal{I} k) (G i) B_{u_{| i}})\ (\lambda s' o. \llbracket c \rrbracket\ (G[i := s'], o\ ||\ (B_u \setminus B_{u_{| i}}), B_{u_{| i}}\ ||\ B_p)\ \mathcal{I})\]
+
+and
+
+\[\llbracket \textsf{stop} \rrbracket\ \tau\ \mathcal{I} := \mathbf{1}_{\tau},\]
+
+where $\textsf{bind}$ is the monadic bind operation for distributions and $||$ is list concatenation.
+
+Above, $\mathcal{I}$ is an interpretation function from handler names to handlers.
 
 
-Note that this above notion can be checked symbolically, even in the presence of a large number of equivalence classes. Represent each equivalence class by a number in $\mathbb{N}$, and represent $\sim$ by a function $f : S \to \mathbb{N}$. Then, we may say that $f$ induces a bisimulation if
+(Corruption and message interference may be modeled by differing semantics.)
 
-\[ \forall s,t \text{ such that $f(s) = f(t)$,} \forall m, \text{ if } s \xrightarrow{m} \mu \text{ and } t \xrightarrow{m} \eta \text{ then } \bar{\mu} \equiv \bar{\eta},\]
+\section{Noninterference}
 
-where $\bar{\mu}(m, n)$ is the probability that $\mu$ outputs a pair $(m', s)$ such that $m = m'$ and $f(s) = n$, and $\equiv$ is equality of distributions. Given such an $f$, $s$ is bisimilar to $t$ if $f(s) = f(t)$. A well-chosen $f$ will be such that the constraint $f(s) = f(t)$ will make it easy to prove that $\bar{\mu} \equiv \bar{\eta}$.
+A \emph{leakage} (or \emph{declassification}) property $\varphi$ is a function $\PID \to (\PID \to \St) \to \Val$. Given an initial global state $G$, $\varphi i G$ denotes the information $i$ should be able to learn from $G$ after the execution of the protocol.
+
+Given two distributions $D$ on traces, write $D \equiv_i D'$ if the marginals $\mathcal{D} (\lambda\ G\ B_u\ B_p.\ (G\ i, B_{p_{| i}}))$ are identical for both $D$ and $D'$. That is, $D \equiv_i D'$ if from party $i$'s position, $D$ contains exactly the same information as $D'$ on both states and processed messages.
+
+Then, say that the pair $(c, \mathcal{I})$ is \emph{$\varphi$-noninterferent} if for all $G, G', i$, 
+\[ (G\ i) = (G'\ i) \wedge \varphi\ i\ G = \varphi\ i\ G' \implies \llbracket c \rrbracket\ (G, \emptyset, \emptyset)\ \mathcal{I} \equiv_i \llbracket c \rrbracket\ (G', \emptyset, \emptyset)\ \mathcal{I}.\]
+
+That is, $(c, \mathcal{I})$ is $\varphi$-noninterferent exactly when, for every party $i$, if two initial global states look identical to $i$ and agree on values of $\phi$, then their induced traces will appear identical to $i$.
+
+Note that in the above definition, equivalence of traces is sensitive to order of message delivery -- but is only sensitive to message ordering from the perspective of individual parties. That is, two send commands in a handler may be safely reordered if they are sent to different recipients.
+
+\section{Examples}
+
+In \emph{multiparty computation}, each party is given an input $x_i$, and a protocol is devised so that each party receives the value $f(\vec{x})$, but no further information is shared. This is modeled by the leakage function $\phi\ i\ G := f((G\ 1).in, \dots, (G\ n).in)$.
+
+Functions may also be asymmetric, in which the leakage function is $\phi\ i\ G := f_i((G\ 1).in, \dots, (G\ n).in)$. A canonical example is \emph{oblivious transfer}, where the sender has two messages $m_0$ and $m_1$, and the receiver has a bit $b$. The sender should learn nothing (i.e., $f_S (m_0, m_1, b) = ()$), while the receiver should learn the $b$th message (i.e., $f_R (m_0, m_1, b) := \text{if}\ b \text{ then } m_0 \text{ else } m_1.$)
+
+
+\section{Approximate reasoning and corruption}
+
+If we require that $D \approx_i D'$ instead of $D \equiv_i D'$, where we may bound the computational distance between distributions, then we may obtain a computational semantics for protocols. Here, $\approx_i$ means that the distributions in quesion are bounded by a negligible function of $\eta$ in distance. 
+
+Given semantics for corrupt adversaries, a \emph{corruption model} $\mathcal{A}$ may be defined to be a set of rewrite rules on schedulers $c$. This may induce a corruption semantics $\mathcal{A}, c \vdash c'$, where $c$ is an initial, uncorrupted schedule and $c'$ is a rewriting of $c$ according to $\mathcal{A}$. Then, we may change the above main definition to universally quantify over all $c'$ such that $\mathcal{A}, c \vdash c'$.
 
 \end{document}
