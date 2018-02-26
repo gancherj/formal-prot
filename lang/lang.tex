@@ -36,7 +36,7 @@ A \emph{handler} is given by the following syntax:
 
 where $e$ is an expression, $\ell$ is in $\Var$, $i$ is a PID, and $D$ is a set of distributions.
 
-Handlers are given monadic semantics as functions $\St \to \InBuf \to \D(\St \times \OutBuf)$. This semantics is immediate, except for $\recv$, which returns the list of all messages from $i$ in the input buffer (in reverse chronological order).
+Handlers are given monadic semantics as functions $\St \to \InBuf \to \D(\St \times \OutBuf)$, where $\InBuf$ and $\OutBuf$ are both buffers. Messages in the input buffer are pairs $(i,m)$, where $m$ is the message content and $i$ is the PID the message came from. Messages in the output buffer, dually, are pairs $(i,m)$, where $i$ is the PID the message is meant for. This semantics is immediate, except for $\recv$, which returns the list of all messages from $i$ in the input buffer (in reverse chronological order).
 
 A \emph{scheduler} is defined by the following syntax:
 \[ c := \textsf{Run}\ P\ @\ i \mid c_1;\ c_2, \]
