@@ -77,20 +77,6 @@ Then, define $\mathsf{crupt}(c)$ to be the set of parties $i \in \PID$ such that
 
 (Note that adversarial programs do not share local state. However, they may freely pass messages to and from each other.)
 
-\section{Noninterference}
-
-A \emph{leakage} (or \emph{declassification}) property $\varphi$ is a function $\PID \to (\PID \to \St) \to \Val$. Given an initial global state $G$, $\varphi\ i\ G$ denotes the information $i$ should be able to learn from $G$ after the execution of the protocol. Given a set $T$ of PIDs, define $\varphi\ T\ G := \{(i, \varphi\ i\ G) \mid i \in T\}$.
-
-Given two distributions $D$ on traces, write $D \equiv_i D'$ if the marginals $\mathcal{D} (\lambda\ G\ B_u\ B_p.\ (G\ i, B_{p_{| i}}))$ are identical for both $D$ and $D'$. That is, $D \equiv_i D'$ if from party $i$'s position, $D$ contains exactly the same information as $D'$ on both states and processed messages (including order of messages). Similarly lift up to sets of parties by defining $D \equiv_T D' := \wedge_{i \in T} D \equiv_i D'$.
-
-
-Given global states $G$ and $G'$, define $G =_T G'$ to be $\forall i \in T, (G\ i) = (G'\ i).$ Then, say that $c$ is \emph{$\varphi$-noninterferent} if for all $c'$ such that $c \vdash_\mathcal{A} c'$ and global states $G, G'$, 
-\[ G=_{\mathsf{crupt}(c')}G' \wedge\ \varphi\ \mathsf{crupt}(c')\ G = \varphi\ \mathsf{crupt}(c')\ G' \implies \llbracket c' \rrbracket\ (G, \emptyset, \emptyset) \equiv_{\mathsf{crupt}(c')} \llbracket c' \rrbracket\ (G', \emptyset, \emptyset).\]
-
-That is, $c'$ is $\varphi$-noninterferent  if whenever two initial global states look identical to the adversary and agree on values of $\varphi$, then their induced final traces will appear identical to the adversary.
-
-Note that in the above definition, equivalence of traces is sensitive to order of message delivery -- but is only sensitive to message ordering from the perspective of individual parties. That is, two send commands in a handler may be safely reordered if they are sent to different recipients.
-
 \subsection{Other adversarial models}
 
 Above, $\vdash_\mathcal{A}$ models full malicious corruption. We may recover semihonest corruption (i.e., ordinary party-level noninterference without byzantine faults) by replacing $\vdash_\mathcal{A}$ with the weakened rewrite rule:
@@ -105,11 +91,26 @@ In the above rule, we do not change the semantics of any party, but only mark ce
 
 Additionally, we may restrict our corruption model with one that cannot corrupt any party at will, but only a certain subset of the parties. An example of this is \emph{honest-verifier zero knowledge}, where the prover is permitted to be malicious but the verifier is not.
 
+\section{Noninterference}
+
+A \emph{leakage} (or \emph{declassification}) property $\varphi$ is a function $\PID \to (\PID \to \St) \to \Val$. Given an initial global state $G$, $\varphi\ i\ G$ denotes the information $i$ should be able to learn from $G$ after the execution of the protocol. Given a set $T$ of PIDs, define $\varphi\ T\ G := \{(i, \varphi\ i\ G) \mid i \in T\}$.
+
+Given two distributions $D$ on traces, write $D \equiv_i D'$ if the marginals $\mathcal{D} (\lambda\ G\ B_u\ B_p.\ (G\ i, B_{p_{| i}}))$ are identical for both $D$ and $D'$. That is, $D \equiv_i D'$ if from party $i$'s position, $D$ contains exactly the same information as $D'$ on both states and processed messages (including order of messages). Similarly lift up to sets of parties by defining $D \equiv_T D' := \wedge_{i \in T} D \equiv_i D'$.
+
+
+Fix a corruption model $\vdash$. Given global states $G$ and $G'$, define $G =_T G'$ to be $\forall i \in T, (G\ i) = (G'\ i).$ Then, say that $c$ is \emph{$\varphi$-noninterferent} if for all $c'$ such that $c \vdash c'$ and global states $G, G'$, 
+\[ G=_{\mathsf{crupt}(c')}G' \wedge\ \varphi\ \mathsf{crupt}(c')\ G = \varphi\ \mathsf{crupt}(c')\ G' \implies \llbracket c' \rrbracket\ (G, \emptyset, \emptyset) \equiv_{\mathsf{crupt}(c')} \llbracket c' \rrbracket\ (G', \emptyset, \emptyset).\]
+
+That is, $c'$ is $\varphi$-noninterferent  if whenever two initial global states look identical to the adversary and agree on values of $\varphi$, then their induced final traces will appear identical to the adversary. 
+
+Note that in the above definition, equivalence of traces is sensitive to order of message delivery -- but is only sensitive to message ordering from the perspective of individual parties. That is, two send commands in a handler may be safely reordered if they are sent to different recipients.
+
+
 \section{Authenticity}
 
 Let $\theta$ be a property of traces $\PID \to ((\PID \to \St) \times \NewEv \times \OldEv) \to \{0,1\}$, and let $\phi$ be a property of memories $\PID \to (\PID \to \St) \to \{0,1\}$. Lift $\phi$ and $\theta$ to operate on sets of $\PID$s by defining $\phi\ T\ G := \wedge_{i \in T} \phi\ i\ G$, and similarly for $\theta$.
 
-Then $c$ is \emph{$(\epsilon, \theta, \phi)$-authentic} if for all $c'$ such that $c \vdash_{\mathcal{A}} c'$ and $G$,
+Fix a corruption model $\vdash$. Then $c$ is \emph{$(\epsilon, \theta, \phi)$-authentic} if for all $c'$ such that $c \vdash c'$ and $G$,
 
 \[ \Pr_{\tau \leftarrow (\llbracket c' \rrbracket\ (G, \emptyset, \emptyset))}[\theta\ \mathsf{crupt}(c')\ \tau] > \epsilon \implies \phi\ \mathsf{crupt}(c')\ G.\]
 
