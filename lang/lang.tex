@@ -75,7 +75,7 @@ Functions may also be asymmetric, in which the leakage function is $\phi\ i\ G :
 
 \section{Approximate reasoning and corruption}
 
-If we require that $D \approx_i D'$ instead of $D \equiv_i D'$, where we may bound the computational distance between distributions, then we may obtain a computational semantics for protocols. Here, $\approx_i$ means that the distributions in quesion are bounded by a negligible function of $\eta$ in distance. 
+If we require that $D \approx_i D'$ instead of $D \equiv_i D'$, where we may bound the computational distance between distributions, then we may obtain a computational semantics for protocols. Here, $\approx_i$ means that the distributions in quesion are bounded by a negligible function of $\eta$ in distance. Crucially, $\approx_i$ is from \emph{the point of view of party $i$}: i.e., we may transform a DDH triple $(g^a, g^b, g^{ab})$ into $(g^a, g^b, g^c)$ only relative to a specific party. 
 
 Given semantics for corrupt adversaries, a \emph{corruption model} $\mathcal{A}$ may be defined to be a set of rewrite rules on schedulers $c$. This may induce a corruption semantics $\mathcal{A}, c \vdash c'$, where $c$ is an initial, uncorrupted schedule and $c'$ is a rewriting of $c$ according to $\mathcal{A}$. Then, we may change the above main definition to universally quantify over all $c'$ such that $\mathcal{A}, c \vdash c'$.
 
