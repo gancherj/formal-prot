@@ -16,6 +16,12 @@
 \newcommand{\D}{\mathcal{D}}
 \newcommand{\NewEv}{\mathsf{NewEv}}
 \newcommand{\OldEv}{\mathsf{OldEv}}
+\newcommand{\Read}{\mathsf{read}}
+\newcommand{\Write}{\mathsf{write}}
+\newcommand{\send}{\mathsf{send}}
+\newcommand{\recv}{\mathsf{recv}}
+
+
 
 \title {Probabilistic Semantic Noninterference}
 \begin{document}
@@ -23,14 +29,17 @@
 
 \section{Parties and Schedulers}
 
-Assume an expression language with values in $\Val$. A \emph{state} $\St$ is a map $\Var \to \Val$, where $\Var$ is a set of variable names. 
-A \emph{buffer} is a value of type $\list (\PID \times \Val)$, where $\PID$ is a set of party names.
-Then, a \emph{handler} $P$ is a semantic function of type $\St \to \InBuf \to \D(\St \times \OutBuf)$, where $\D$ is the finitely supported distribution monad. It is the intention that $\InBuf$ only contains the set of unprocessed input messages, and $\OutBuf$ only contains the set of output messages produced during the current invocation of $P$. It is also the intention that variables in $\St$ should not be overwritten, so that the state grows monotonically.
+Assume an expression language with values in $\Val$. A \emph{state} $\St$ is a map $\Var \to (\Val + \bot)$, where $\Var$ is a set of variable names. A \emph{buffer} is a value of type $\list (\PID \times \Val)$, where $\PID$ is a set of party names.
 
-(Later, $P$ can be given monadically, in which we may statically track what variables are being accessed and so on.)
+A \emph{handler} is given by the following syntax:
+\[ P := x \leftarrow \Read\ \ell \mid \Write\ \ell\ e \mid \send\ i\ e \mid \recv\ i \mid x \leftarrow D\ e \mid \textsf{if } e \textsf{ then } P \textsf{ else } P \mid P; P, \]
+
+where $e$ is an expression, $\ell$ is in $\Var$, $i$ is a PID, and $D$ is a set of distributions.
+
+Handlers are given monadic semantics as functions $\St \to \InBuf \to \D(\St \times \OutBuf)$. This semantics is immediate, except for $\recv$, which returns the list of all messages from $i$ in the input buffer (in reverse chronological order).
 
 A \emph{scheduler} is defined by the following syntax:
-\[ c := \textsf{Run}\ k\ @\ i;\ c \mid \textsf{stop}, \]
+\[ c := \textsf{Run}\ P\ @\ i \mid c_1;\ c_2, \]
 
 where $k \in \Handler$ is a handler name, and $i$ is a $\PID$.
 
@@ -38,45 +47,83 @@ where $k \in \Handler$ is a handler name, and $i$ is a $\PID$.
 
 A \emph{trace} $\tau$ is a value of type $(\PID \to \St) \times \NewEv \times \OldEv$, where $\NewEv$ and $\OldEv$ are logs of the form $\list (\PID \times \PID \times \Val)$. The first component is the global state, the second component is ordered buffer of unprocessed messages, and the third component is the ordered buffer of processed messages. Given a buffer $B$, define $B_{| i}$ to be the pairs in $B$ such that the second component is equal to $i$ (preserving order).
 
-Then, define our scheduler semantics $\llbracket c \rrbracket : \tau \to (\Handler \to P) \to \D(\tau)$ by
+Then, define our scheduler semantics $\llbracket c \rrbracket : \textsf{Trace} \to \D(\textsf{Trace})$ by
 
-\[\llbracket \textsf{Run}\ k\ @\ i; c \rrbracket (G, B_u, B_p) \mathcal{I} := \textsf{bind}\ ((\mathcal{I} k) (G i) B_{u_{| i}})\ (\lambda s' o. \llbracket c \rrbracket\ (G[i := s'], o\ ||\ (B_u \setminus B_{u_{| i}}), B_{u_{| i}}\ ||\ B_p)\ \mathcal{I})\]
+\[\llbracket \textsf{Run}\ P\ @\ i \rrbracket (G, B_u, B_p) := \textsf{bind}_{\D}\ (P\ (G\ i)\ B_{u_{| i}})\ (\lambda (s', o).\ \textsf{return}_{\D} (G[i := s'], o\ ||\ (B_u \setminus B_{u_{| i}}), B_{u_{| i}}\ ||\ B_p)\ \]
 
 and
 
-\[\llbracket \textsf{stop} \rrbracket\ \tau\ \mathcal{I} := \mathbf{1}_{\tau},\]
+\[\llbracket c_1;\ c_2 \rrbracket\ \tau\ := \textsf{bind}_{\D}\ (\llbracket c_1 \rrbracket \tau) \llbracket c_2 \rrbracket.\]
 
-where $\textsf{bind}$ is the monadic bind operation for distributions and $||$ is list concatenation.
+where $\textsf{bind}_{\D}$ and $\textsf{return}_{\D}$ are the monadic bind and return operations for distributions and $||$ is list concatenation.
 
-Above, $\mathcal{I}$ is an interpretation function from handler names to handlers.
+\section{Corruption}
 
+Extend the syntax of schedulers as so:
+\[ c := \dots \mid \textsf{Corrupt}\ P\ @\ i.\]
 
-(Corruption and message interference may be modeled by differing semantics.)
+The semantics of the added command is exactly the same as that of \textsf{Run}.
+
+We define (static) corruption by the following rewrite rules, given by the judgement $c \vdash_{\mathcal{A}} c'$:
+
+\begin{tabular}{cccc}
+    $\infer{c \vdash_{\mathcal{A}} c}{}$ & 
+    $\infer{\textsf{Run}\ P\ @\ i \vdash_{\mathcal{A}} \textsf{Corrupt}\ Q\ @\ i}{}$ &
+    $\infer{c_1;c_2 \vdash_{\mathcal{A}} c_1'; c_2'} {c_1 \vdash_\mathcal{A} c_1' & c_2 \vdash_\mathcal{A} c_2'}$ &
+    $\infer{c \vdash_{\mathcal{A}} c'; \textsf{Corrupt}\ Q\ @\ i}{c \vdash_\mathcal{A} c'}$ \\
+\end{tabular}
+
+Then, define $\mathsf{crupt}(c)$ to be the set of parties $i \in \PID$ such that $\textsf{Corrupt}\ Q\ @\ i$ appears in $c$ for some $Q$.
+
+(Note that adversarial programs do not share local state. However, they may freely pass messages to and from each other.)
 
 \section{Noninterference}
 
-A \emph{leakage} (or \emph{declassification}) property $\varphi$ is a function $\PID \to (\PID \to \St) \to \Val$. Given an initial global state $G$, $\varphi i G$ denotes the information $i$ should be able to learn from $G$ after the execution of the protocol.
+A \emph{leakage} (or \emph{declassification}) property $\varphi$ is a function $\PID \to (\PID \to \St) \to \Val$. Given an initial global state $G$, $\varphi\ i\ G$ denotes the information $i$ should be able to learn from $G$ after the execution of the protocol. Given a set $T$ of PIDs, define $\varphi\ T\ G := \{(i, \varphi\ i\ G) \mid i \in T\}$.
 
-Given two distributions $D$ on traces, write $D \equiv_i D'$ if the marginals $\mathcal{D} (\lambda\ G\ B_u\ B_p.\ (G\ i, B_{p_{| i}}))$ are identical for both $D$ and $D'$. That is, $D \equiv_i D'$ if from party $i$'s position, $D$ contains exactly the same information as $D'$ on both states and processed messages.
+Given two distributions $D$ on traces, write $D \equiv_i D'$ if the marginals $\mathcal{D} (\lambda\ G\ B_u\ B_p.\ (G\ i, B_{p_{| i}}))$ are identical for both $D$ and $D'$. That is, $D \equiv_i D'$ if from party $i$'s position, $D$ contains exactly the same information as $D'$ on both states and processed messages (including order of messages). Similarly lift up to sets of parties by defining $D \equiv_T D' := \wedge_{i \in T} D \equiv_i D'$.
 
-Then, say that the pair $(c, \mathcal{I})$ is \emph{$\varphi$-noninterferent} if for all $G, G', i$, 
-\[ (G\ i) = (G'\ i) \wedge \varphi\ i\ G = \varphi\ i\ G' \implies \llbracket c \rrbracket\ (G, \emptyset, \emptyset)\ \mathcal{I} \equiv_i \llbracket c \rrbracket\ (G', \emptyset, \emptyset)\ \mathcal{I}.\]
 
-That is, $(c, \mathcal{I})$ is $\varphi$-noninterferent exactly when, for every party $i$, if two initial global states look identical to $i$ and agree on values of $\phi$, then their induced traces will appear identical to $i$.
+Given global states $G$ and $G'$, define $G =_T G'$ to be $\forall i \in T, (G\ i) = (G'\ i).$ Then, say that $c$ is \emph{$\varphi$-noninterferent} if for all $c'$ such that $c \vdash_\mathcal{A} c'$ and global states $G, G'$, 
+\[ G=_{\mathsf{crupt}(c')}G' \wedge\ \varphi\ \mathsf{crupt}(c')\ G = \varphi\ \mathsf{crupt}(c')\ G' \implies \llbracket c' \rrbracket\ (G, \emptyset, \emptyset) \equiv_{\mathsf{crupt}(c')} \llbracket c' \rrbracket\ (G', \emptyset, \emptyset).\]
+
+That is, $c'$ is $\varphi$-noninterferent  if whenever two initial global states look identical to the adversary and agree on values of $\varphi$, then their induced final traces will appear identical to the adversary.
 
 Note that in the above definition, equivalence of traces is sensitive to order of message delivery -- but is only sensitive to message ordering from the perspective of individual parties. That is, two send commands in a handler may be safely reordered if they are sent to different recipients.
 
+\subsection{Other adversarial models}
+
+Above, $\vdash_\mathcal{A}$ models full malicious corruption. We may recover semihonest corruption (i.e., ordinary party-level noninterference without byzantine faults) by replacing $\vdash_\mathcal{A}$ with the weakened rewrite rule:
+
+\begin{tabular}{ccc}
+    $\infer{c \vdash_{\mathcal{S}} c}{}$ & 
+    $\infer{\textsf{Run}\ P\ @\ i \vdash_{\mathcal{S}} \textsf{Corrupt}\ P\ @\ i}{}$ &
+    $\infer{c_1;c_2 \vdash_{\mathcal{S}} c_1'; c_2'} {c_1 \vdash_\mathcal{S} c_1' & c_2 \vdash_\mathcal{A} c_2'}$ \\
+\end{tabular}
+
+In the above rule, we do not change the semantics of any party, but only mark certain parties for corruption. By marking only a single party for corruption, the above definition collapses to ordinary noninterference.
+
+Additionally, we may restrict our corruption model with one that cannot corrupt any party at will, but only a certain subset of the parties. An example of this is \emph{honest-verifier zero knowledge}, where the prover is permitted to be malicious but the verifier is not.
+
+\section{Authenticity}
+
+Let $\theta$ be a property of traces $\PID \to ((\PID \to \St) \times \NewEv \times \OldEv) \to \{0,1\}$, and let $\phi$ be a property of memories $\PID \to (\PID \to \St) \to \{0,1\}$. Lift $\phi$ and $\theta$ to operate on sets of $\PID$s by defining $\phi\ T\ G := \wedge_{i \in T} \phi\ i\ G$, and similarly for $\theta$.
+
+Then $c$ is \emph{$(\epsilon, \theta, \phi)$-authentic} if for all $c'$ such that $c \vdash_{\mathcal{A}} c'$ and $G$,
+
+\[ \Pr_{\tau \leftarrow (\llbracket c' \rrbracket\ (G, \emptyset, \emptyset))}[\theta\ \mathsf{crupt}(c')\ \tau] > \epsilon \implies \phi\ \mathsf{crupt}(c')\ G.\]
+
+That is, $c$ is \emph{$(\epsilon, \theta, \phi)$-authentic} if whenever the adversary triggers the event $\theta$ with probability larger than $\epsilon$, then $\phi$ must be true of the adversary's initial state.
+
+
 \section{Examples}
+
 
 In \emph{multiparty computation}, each party is given an input $x_i$, and a protocol is devised so that each party receives the value $f(\vec{x})$, but no further information is shared. This is modeled by the leakage function $\phi\ i\ G := f((G\ 1).in, \dots, (G\ n).in)$.
 
 Functions may also be asymmetric, in which the leakage function is $\phi\ i\ G := f_i((G\ 1).in, \dots, (G\ n).in)$. A canonical example is \emph{oblivious transfer}, where the sender has two messages $m_0$ and $m_1$, and the receiver has a bit $b$. The sender should learn nothing (i.e., $f_S (m_0, m_1, b) = ()$), while the receiver should learn the $b$th message (i.e., $f_R (m_0, m_1, b) := \text{if}\ b \text{ then } m_0 \text{ else } m_1.$)
 
 
-\section{Approximate reasoning and corruption}
-
-If we require that $D \approx_i D'$ instead of $D \equiv_i D'$, where we may bound the computational distance between distributions, then we may obtain a computational semantics for protocols. Here, $\approx_i$ means that the distributions in quesion are bounded by a negligible function of $\eta$ in distance. Crucially, $\approx_i$ is from \emph{the point of view of party $i$}: i.e., we may transform a DDH triple $(g^a, g^b, g^{ab})$ into $(g^a, g^b, g^c)$ only relative to a specific party. 
-
-Given semantics for corrupt adversaries, a \emph{corruption model} $\mathcal{A}$ may be defined to be a set of rewrite rules on schedulers $c$. This may induce a corruption semantics $\mathcal{A}, c \vdash c'$, where $c$ is an initial, uncorrupted schedule and $c'$ is a rewriting of $c$ according to $\mathcal{A}$. Then, we may change the above main definition to universally quantify over all $c'$ such that $\mathcal{A}, c \vdash c'$.
+We may define \emph{zero-knowledge} proofs to be authentic relative to the predicates ``the verifier output 1'' and ``the prover has a correct witness $w$ to the NP-statement $x$'', and noninterferent relative to the leakage function ``$R(x,w) = 1$'' for the verifier, and no leakage for the prover. 
 
 \end{document}
