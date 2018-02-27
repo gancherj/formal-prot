@@ -27,12 +27,14 @@
 \begin{document}
 \maketitle
 
-\section{Parties and Schedulers}
+
+\section{General Message Passing}
+\subsection{Parties and Schedulers}
 
 Assume an expression language with values in $\Val$. A \emph{state} $\St$ is a map $\Var \to (\Val + \bot)$, where $\Var$ is a set of variable names. A \emph{buffer} is a value of type $\list (\PID \times \Val)$, where $\PID$ is a set of party names.
 
 A \emph{handler} is given by the following syntax:
-\[ P := x \leftarrow \Read\ \ell \mid \Write\ \ell\ e \mid \send\ i\ e \mid \recv\ i \mid x \leftarrow D\ e \mid \textsf{if } e \textsf{ then } P \textsf{ else } P \mid P; P, \]
+\[ P := x \leftarrow \Read\ \ell \mid \Write\ \ell\ e \mid \send\ i\ e \mid x \leftarrow \recv\ i \mid x \leftarrow D\ e \mid \textsf{if } e \textsf{ then } P \textsf{ else } P \mid P; P, \]
 
 where $e$ is an expression, $\ell$ is in $\Var$, $i$ is a PID, and $D$ is a set of distributions.
 
@@ -43,7 +45,7 @@ A \emph{scheduler} is defined by the following syntax:
 
 where $k \in \Handler$ is a handler name, and $i$ is a $\PID$.
 
-\section{Semantics}
+\subsection{Semantics}
 
 A \emph{trace} $\tau$ is a value of type $(\PID \to \St) \times \NewEv \times \OldEv$, where $\NewEv$ and $\OldEv$ are logs of the form $\list (\PID \times \PID \times \Val)$. The first component is the global state, the second component is ordered buffer of unprocessed messages, and the third component is the ordered buffer of processed messages. Given a buffer $B$, define $B_{| i}$ to be the pairs in $B$ such that the second component is equal to $i$ (preserving order).
 
@@ -57,7 +59,7 @@ and
 
 where $\textsf{bind}_{\D}$ and $\textsf{return}_{\D}$ are the monadic bind and return operations for distributions and $||$ is list concatenation.
 
-\section{Corruption}
+\subsection{Corruption}
 
 Extend the syntax of schedulers as so:
 \[ c := \dots \mid \textsf{Corrupt}\ P\ @\ i.\]
@@ -77,7 +79,7 @@ Then, define $\mathsf{crupt}(c)$ to be the set of parties $i \in \PID$ such that
 
 (Note that adversarial programs do not share local state. However, they may freely pass messages to and from each other.)
 
-\subsection{Other adversarial models}
+\subsubsection{Other adversarial models}
 
 Above, $\vdash_\mathcal{A}$ models full malicious corruption. We may recover semihonest corruption (i.e., ordinary party-level noninterference without byzantine faults) by replacing $\vdash_\mathcal{A}$ with the weakened rewrite rule:
 
@@ -91,7 +93,7 @@ In the above rule, we do not change the semantics of any party, but only mark ce
 
 Additionally, we may restrict our corruption model with one that cannot corrupt any party at will, but only a certain subset of the parties. An example of this is \emph{honest-verifier zero knowledge}, where the prover is permitted to be malicious but the verifier is not.
 
-\section{Noninterference}
+\subsection{Noninterference}
 
 A \emph{leakage} (or \emph{declassification}) property $\varphi$ is a function $\PID \to (\PID \to \St) \to \Val$. Given an initial global state $G$, $\varphi\ i\ G$ denotes the information $i$ should be able to learn from $G$ after the execution of the protocol. Given a set $T$ of PIDs, define $\varphi\ T\ G := \{(i, \varphi\ i\ G) \mid i \in T\}$.
 
@@ -106,7 +108,7 @@ That is, $c'$ is $\varphi$-noninterferent  if whenever two initial global states
 Note that in the above definition, equivalence of traces is sensitive to order of message delivery -- but is only sensitive to message ordering from the perspective of individual parties. That is, two send commands in a handler may be safely reordered if they are sent to different recipients.
 
 
-\section{Authenticity}
+\subsection{Authenticity}
 
 Let $\theta$ be a property of traces $\PID \to ((\PID \to \St) \times \NewEv \times \OldEv) \to \{0,1\}$, and let $\phi$ be a property of memories $\PID \to (\PID \to \St) \to \{0,1\}$. Lift $\phi$ and $\theta$ to operate on sets of $\PID$s by defining $\phi\ T\ G := \wedge_{i \in T} \phi\ i\ G$, and similarly for $\theta$.
 
@@ -117,7 +119,7 @@ Fix a corruption model $\vdash$. Then $c$ is \emph{$(\epsilon, \theta, \phi)$-au
 That is, $c$ is \emph{$(\epsilon, \theta, \phi)$-authentic} if whenever the adversary triggers the event $\theta$ with probability larger than $\epsilon$, then $\phi$ must be true of the adversary's initial state.
 
 
-\section{Examples}
+\subsection{Examples}
 
 
 In \emph{multiparty computation}, each party is given an input $x_i$, and a protocol is devised so that each party receives the value $f(\vec{x})$, but no further information is shared. This is modeled by the leakage function $\phi\ i\ G := f((G\ 1).in, \dots, (G\ n).in)$.
@@ -126,5 +128,33 @@ Functions may also be asymmetric, in which the leakage function is $\phi\ i\ G :
 
 
 We may define \emph{zero-knowledge} proofs to be authentic relative to the predicates ``the verifier output 1'' and ``the prover has a correct witness $w$ to the NP-statement $x$'', and noninterferent relative to the leakage function ``$R(x,w) = 1$'' for the verifier, and no leakage for the prover. 
+
+
+\section{Sessioned Parties}
+
+Here, we will consider parties and adversaries which are assumed to follow the protocol's intended session structure. 
+
+Let $\St$ be as before. The type $\mathsf{Party}\ M\ M'$ is defined to be functions $\St \to M \to \D(\St \times M')$. Parties are given by the following syntax:
+
+\[ P := x \leftarrow \Read\ \ell \mid \Write\ \ell\ e \mid \send e \mid x \leftarrow \recv\ \mid x \leftarrow D\ e \mid \textsf{if } e \textsf{ then } P \textsf{ else } P \mid P; P, \]
+
+where $\recv$ evaluates to the current input message, and $\send$ alters the intended output message. (I.e., a second invocation of $\send$ will overwrite the first one.) Parties come with a typing relation $\vdash P : \mathsf{Party}\ M\ M'$, which says that all recieves and sends respect $M$ and $M'$.
+
+
+Schedulers have the same syntax as before:
+
+\[ c := \textsf{Run}\ P\ @\ i \mid \textsf{Corrupt}\ P\ @\ i \mid c; c\]
+
+Schedulers are well-typed when they respect the sessions of the parties:
+
+\begin{tabular}{ccc}
+    $\infer{\vdash \textsf{Run}\ P\ @\ i : \textsf{Schedule}\ M\ M'}{\vdash P : \mathsf{Party}\ M\ M'}$ &
+    $\infer{\vdash \textsf{Corrupt}\ P\ @\ i : \textsf{Schedule}\ M\ M'}{\vdash P : \mathsf{Party}\ M\ M'}$ &
+    $\infer{\vdash c; c' : \textsf{Schedule}\ M\ M'}{\vdash c : \textsf{Schedule}\ M\ M'' & \vdash c' : \textsf{Schedule}\ M''\ M'}$ \\
+\end{tabular}
+
+
+
+
 
 \end{document}
