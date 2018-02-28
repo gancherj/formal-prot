@@ -228,7 +228,7 @@ It is often the case that schedules cannot immediately be written as schedule co
 \[(g^a, g^b, g^{ab} \mid a,b \xleftarrow{\$} \mathbb{Z}_{\mathsf{Order}(G^\eta)}) \approx (g^a, g^b, g^c \mid a,b,c \xleftarrow{\$} \mathbb{Z}_{\textsf{Order}(G^\eta)}).\]
 
 (Above, call the left distribution $\mathsf{DDHReal}$, and the right distribution $\mathsf{DDHIdeal}$.)
-The above distributions do not give the distinguisher access to the secrets $a,b$, or $c$. However, in a distributed setting, it will likely be the case that one party is holding the secret exponents, but the other party does not. In order to apply the above lemma, schedules must be massaged in order to abstract out the secret exponents. An example is oblivious transfer from DDH: given a sender with messages $m_0$ and $m_1$, and a receiver with bit $B$,
+The above distributions do not give the distinguisher access to the secrets $a,b$, or $c$. However, in a distributed setting, it will likely be the case that one party is holding the secret exponents, but the other party does not. In order to apply the above lemma, schedules must be massaged in order to abstract out the secret exponents. An example is oblivious transfer from DDH: given a sender with messages $m_0$ and $m_1$, and a receiver with bit $B$, the oblivious transfer protocol is
 
 
 \begin{enumerate}
@@ -236,6 +236,8 @@ The above distributions do not give the distinguisher access to the secrets $a,b
     \item Sender, on input messages $(h_1, h_2, h_3, h_4)$, checks that $h_3 \neq h_4$. If they are unequal, they generate uniform secrets $r,s$, and send the tuple $(h_1^r g^s, m_0 h_3^r h_2^s, m_1 h_4^r h_2^s)$. If they are equal, the sender sends $(g, g, g)$ (or some other dummy message).
     \item On input $(z, w_0, w_1)$, receiver outputs $w_B / (z^b)$.
 \end{enumerate}
+
+(To output $e$ means to write $e$ to a dedicated output slot in one's local memory.)
 
 In order to prove noninterference against the sender (so that they cannot learn the bit $B$), we first apply $\rightsquigarrow$ to the above protocol to obtain:
 \begin{enumerate}
