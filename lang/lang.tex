@@ -5,6 +5,8 @@
 \usepackage{stmaryrd}
 \usepackage{algorithm, algpseudocode}
 
+
+\newtheorem{lemma}{Lemma}
 \newcommand{\Val}{\mathsf{Val}}
 \newcommand{\St}{\mathsf{St}}
 \newcommand{\InBuf}{\mathsf{InBuf}}
@@ -12,7 +14,7 @@
 \newcommand{\PID}{\mathsf{PID}}
 \newcommand{\Var}{\mathsf{Var}}
 \newcommand{\Handler}{\mathsf{Handler}}
-\renewcommand{\list}{\mathsf{list}}
+\newcommand{\List}{\mathsf{list}}
 \newcommand{\D}{\mathcal{D}}
 \newcommand{\NewEv}{\mathsf{NewEv}}
 \newcommand{\OldEv}{\mathsf{OldEv}}
@@ -27,11 +29,13 @@
 \begin{document}
 \maketitle
 
+In this note, I give two semantics for protocols. Section 1 outlines a general message passing system, where parties are allowed to send arbitrary messages at any time. Section 2 outlines a \emph{session-restricted} system, where parties are only allowed to send messages specified by the schedule. 
+The type of system in Section 2 is much more amenable to analysis; it should be the case that there exists a compiler which turns a noninterferent system in Section 2 to one in Section 1.
 
 \section{General Message Passing}
 \subsection{Parties and Schedulers}
 
-Assume an expression language with values in $\Val$. A \emph{state} $\St$ is a map $\Var \to (\Val + \bot)$, where $\Var$ is a set of variable names. A \emph{buffer} is a value of type $\list (\PID \times \Val)$, where $\PID$ is a set of party names.
+Assume an expression language with values in $\Val$. A \emph{state} $\St$ is a map $\Var \to (\Val + \bot)$, where $\Var$ is a set of variable names. A \emph{buffer} is a value of type $\List (\PID \times \Val)$, where $\PID$ is a set of party names.
 
 A \emph{handler} is given by the following syntax:
 \[ P := x \leftarrow \Read\ \ell \mid \Write\ \ell\ e \mid \send\ i\ e \mid x \leftarrow \recv\ i \mid x \leftarrow D\ e \mid \textsf{if } e \textsf{ then } P \textsf{ else } P \mid P; P, \]
@@ -47,7 +51,7 @@ where $k \in \Handler$ is a handler name, and $i$ is a $\PID$.
 
 \subsection{Semantics}
 
-A \emph{trace} $\tau$ is a value of type $(\PID \to \St) \times \NewEv \times \OldEv$, where $\NewEv$ and $\OldEv$ are logs of the form $\list (\PID \times \PID \times \Val)$. The first component is the global state, the second component is ordered buffer of unprocessed messages, and the third component is the ordered buffer of processed messages. Given a buffer $B$, define $B_{| i}$ to be the pairs in $B$ such that the second component is equal to $i$ (preserving order).
+A \emph{trace} $\tau$ is a value of type $(\PID \to \St) \times \NewEv \times \OldEv$, where $\NewEv$ and $\OldEv$ are logs of the form $\List (\PID \times \PID \times \Val)$. The first component is the global state, the second component is ordered buffer of unprocessed messages, and the third component is the ordered buffer of processed messages. Given a buffer $B$, define $B_{| i}$ to be the pairs in $B$ such that the second component is equal to $i$ (preserving order).
 
 Then, define our scheduler semantics $\llbracket c \rrbracket : \textsf{Trace} \to \D(\textsf{Trace})$ by
 
@@ -159,7 +163,7 @@ A scheduler is \emph{runnable} if it has type $\textsf{Sched}\ \textsf{unit}\ M$
 \subsection{Semantics}
 
 
-As before, a global state is a map $\PID \to \St$. A \emph{trace} is a value of type $(\PID \to \St) \times \list (\PID \times \Val)$.
+As before, a global state is a map $\PID \to \St$. A \emph{trace} is a value of type $(\PID \to \St) \times \List (\PID \times \Val)$.
 
 Commands are given as mappings from traces to distributions over traces:
 
@@ -182,6 +186,8 @@ Given a set of PIDs $T$, define
 
 As before, define $\mathsf{crupt}(c)$ to be the set of parties in $c$ that are corrupted.
 
+TODO: The above corruption model isn't quite right. We want adversaries to be able to share information; instead, there should be a type \textsf{AdvParty} which allows corruptions to share arbitrary state. (The above is fine for the two-party case, however)
+
 \subsection{Trace properties}
 
 Trace properties for this language are essentially the same as before: given a trace $\tau$ and a set of PIDs $T$, define $\tau_{| T}$ to be $T$'s visible part of $\tau$. Then, $c$ is $\varphi$-noninterferent if it is runnable and for all $c'$ such that $c \rightsquigarrow c'$ and global states $G$ and $G'$,
@@ -191,11 +197,77 @@ Trace properties for this language are essentially the same as before: given a t
 Similarly, $c$ is \emph{$(\epsilon, \theta, \phi)$-authentic} if for all $c'$ such that $c \rightsquigarrow c'$ and $G$,
 \[ \Pr_{\tau \leftarrow (\llbracket c' \rrbracket\ (G, [()]))}[\theta\ \mathsf{crupt}(c')\ \tau] > \epsilon \implies \phi\ \mathsf{crupt}(c')\ G,\]
 
-where $\theta : \PID \to (\PID \to \St) \times \list (\PID \times \Val) \to \{0,1\}$, and $\phi : \PID \to (\PID \to \St) \to \{0,1\}$.
+where $\theta : \PID \to (\PID \to \St) \times \List (\PID \times \Val) \to \{0,1\}$, and $\phi : \PID \to (\PID \to \St) \to \{0,1\}$.
 
-\subsection{Contexts and Runtime}
+\subsection{Contexts and Indistinguishability}
 
-Let $c[_]$ denote single-holed contexts.
+
+In this section, fix some cost semantics for probabilistic programs.
+Let $c[\_, \_, \dots, \_]$ denote multi-holed contexts where the hole ranges over \emph{distributions}. (These distributions all have type $\Val \to \D(\Val)$.)
+
+A \emph{distribution family} is an $n$-tuple of distributions of type $\Val \to \D(\Val)$, parameterized by a natural number $\eta$ (called the \emph{security parameter}). Let $\vec{D}$ and $\vec{D'}$ be two distribution families. Let $D_i^\eta$ be the $i$th element of $\vec{D}^\eta$. Write $\vec{D} \approx \vec{D'}$ if for any polynomial time program $\mathsf{Dist}[\_, \_, \dots, \_] : \D(\{0,1\})$ with holes for the distributions in $\vec{D}$, there exists a negligible function $\epsilon$ such that
+\[|\Pr[\mathsf{Dist}[D_1^\eta, \dots, D_n^\eta] = 1] - \Pr[\mathsf{Dist}[D'^\eta_1, \dots, D'^\eta_n] = 1]| < \epsilon(\eta).\]
+
+If $\vec{D} \approx \vec{D'}$, then we say that $\vec{D}$ and $\vec{D'}$ are indistinguishable.
+Finally, a schedule context $c[\_, \dots, \_]$ is \emph{polynomial time} if for every distribution family $\vec{D}$, if each $D_i^\eta$ may be executed in time polynomial in $\eta$, then $c[D_1^\eta, \dots, D_n^\eta]$ may be executed in time polynomial in $\eta$.
+
+Then, we should recieve:
+\begin{lemma}
+    Let $c[\_, \_, \dots, \_]$ be a polynomial time schedule context. If $\vec{D} \approx \vec{D'}$, then the unary distribution family $\lambda \eta. \llbracket c[D_1^\eta, \dots, D_n^\eta] \rrbracket$ is indistinguishable from $\lambda \eta. \llbracket c[D'^\eta_1, \dots, D'^\eta_n] \rrbracket$.
+\end{lemma}
+
+Since our language for parties doesn't contain loops, we should also get that
+\begin{lemma}
+    Let $c[\_, \dots, \_]$ be a schedule context. Then $c$ is polynomial time.
+\end{lemma}
+
+(Distributions which appear in $c[\_, \dots, \_]$ cannot depend on the security parameter.)
+
+\subsection{DDH Oblivious Transfer.}
+It is often the case that schedules cannot immediately be written as schedule contexts. For example, the DDH assumption states that, for a family of cyclic groups $(g,G)^\eta$, (where $g$ is a generator of $G$)
+\[(g^a, g^b, g^{ab} \mid a,b \xleftarrow{\$} \mathbb{Z}_{\mathsf{Order}(G^\eta)}) \approx (g^a, g^b, g^c \mid a,b,c \xleftarrow{\$} \mathbb{Z}_{\textsf{Order}(G^\eta)}).\]
+
+(Above, call the left distribution $\mathsf{DDHReal}$, and the right distribution $\mathsf{DDHIdeal}$.)
+The above distributions do not give the distinguisher access to the secrets $a,b$, or $c$. However, in a distributed setting, it will likely be the case that one party is holding the secret exponents, but the other party does not. In order to apply the above lemma, schedules must be massaged in order to abstract out the secret exponents. An example is oblivious transfer from DDH: given a sender with messages $m_0$ and $m_1$, and a receiver with bit $B$,
+
+
+\begin{enumerate}
+    \item If $B=0$, receiver generates $a,b,c$ uniformly and sends the tuple $(g^a, g^b, g^{ab}, g^c)$. If $B=1$, the last two messages are swapped.
+    \item Sender, on input messages $(h_1, h_2, h_3, h_4)$, checks that $h_3 \neq h_4$. If they are unequal, they generate uniform secrets $r,s$, and send the tuple $(h_1^r g^s, m_0 h_3^r h_2^s, m_1 h_4^r h_2^s)$. If they are equal, the sender sends $(g, g, g)$ (or some other dummy message).
+    \item On input $(z, w_0, w_1)$, receiver outputs $w_B / (z^b)$.
+\end{enumerate}
+
+In order to prove noninterference against the sender (so that they cannot learn the bit $B$), we first apply $\rightsquigarrow$ to the above protocol to obtain:
+\begin{enumerate}
+    \item If $B=0$, receiver generates $a,b,c$ uniformly and sends the tuple $(g^a, g^b, g^{ab}, g^c)$. If $B=1$, the last two messages are swapped.
+    \item Sender, on input messages $(h_1, h_2, h_3, h_4)$, performs some arbitrary PPT computation and sends an output message of type $G^\eta \times G^\eta \times G^\eta$.
+    \item On input $(z, w_0, w_1)$, receiver outputs $w_B / (z^b)$.
+\end{enumerate}
+
+We now note that, \emph{from the point of view of the sender}, the above protocol is equivalent to
+\begin{enumerate}
+    \item If $B=0$, receiver generates $a,b,c$ uniformly and sends the tuple $(g^a, g^b, g^{ab}, g^c)$. If $B=1$, the last two messages are swapped.
+    \item Sender, on input messages $(h_1, h_2, h_3, h_4)$, performs some arbitrary PPT computation and sends an output message of type $G^\eta \times G^\eta \times G^\eta$.
+    \item Receiver outputs $\bot$.
+\end{enumerate}
+
+The above step can be seen to be valid semantically, by noting that the third step of the protocol does not contribute to the sender's projection of the trace.
+
+Now, we may write the above protocol as a schedule context $c[\textsf{DDHReal}, \textsf{Samp}]$:
+\begin{enumerate}
+    \item Receiver generates $(a,b,c)$ from $\textsf{DDHReal}$. Receiver also generates $d$ from $\textsf{Samp}$. If $B=0$, receiver sends $(a,b,c,d)$. If $B=1$, receiver sends $(a,b,d,c)$. 
+    \item Sender, on input messages $(h_1, h_2, h_3, h_4)$, performs some arbitrary PPT computation and sends an output message of type $G^\eta \times G^\eta \times G^\eta$.
+    \item Receiver outputs $\bot$.
+\end{enumerate}
+
+By the above lemma, the above schedule context is computationally close to $c[\textsf{DDHIdeal}, \textsf{Samp}]$, which is the same as:
+\begin{enumerate}
+    \item Receiver generates $(a,b,c,d)$ uniformly from $G^\eta$. If $B=0$, receiver outputs $(a,b,c,d)$; if $B=1$, receiver outputs $(a,b,d,c)$.
+    \item Sender, on input messages $(h_1, h_2, h_3, h_4)$, performs some arbitrary PPT computation and sends an output message of type $G^\eta \times G^\eta \times G^\eta$.
+    \item Receiver outputs $\bot$.
+\end{enumerate}
+
+One can now prove semantically that the above program satisfies noninterference against the sender. 
 
 
 \end{document}
