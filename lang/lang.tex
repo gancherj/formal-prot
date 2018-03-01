@@ -108,7 +108,7 @@ A \emph{leakage} (or \emph{declassification}) property $\varphi$ is a function $
 
 Given two distributions $D$ on traces, write $D \equiv_i D'$ if the marginals $\mathcal{D} (\lambda\ B_u\ B_p.\ B_{p_{| i}})$ are identical for both $D$ and $D'$. That is, $D \equiv_i D'$ if from party $i$'s position, $D$ contains exactly the same information as $D'$ on processed messages (including order of messages). Similarly lift up to sets of parties by defining $D \equiv_T D' := \wedge_{i \in T} D \equiv_i D'$.
 
-An \emph{initial input} $I$ is a function $\PID \to \Val$. Given an initial input $\I$, let $\tau_\I$ be the trace $(\{(i,i,\I(i)) \mid i \in \textsf{PID}\}, \emptyset)$. That is, $\tau_\I$ intializes every party's initial input according to $\I$.
+An \emph{initial input} $I$ is a function $\PID \to \Val$. Given an initial input $\I$, let $\tau_\I$ be the trace $(\{(i,i,\I(i)) \mid i \in \textsf{PID}\}, \emptyset)$. That is, $\tau_\I$ intializes every party's first message according to $\I$.
 
 Fix a corruption model $\rightsquigarrow$. Given initial states $\I$ and $\I'$, define $\I =_S \I'$ to be $\forall i \in S, \I(i) = \I'(i).$ Then, say that $c$ is \emph{$\varphi$-noninterferent} if for all $c'$ such that $c \rightsquigarrow c'$ and global states $\I, \I'$, 
 \[ \I=_{\mathsf{crupt}(c')}\I' \wedge\ \varphi\ \mathsf{crupt}(c')\ \I = \varphi\ \mathsf{crupt}(c')\ \I' \implies \llbracket c' \rrbracket\ \tau_\I \equiv_{\mathsf{crupt}(c')} \llbracket c' \rrbracket\ \tau_{\I'}.\]
@@ -119,6 +119,8 @@ Note that in the above definition, equivalence of traces is sensitive to order o
 
 
 \subsection{Authenticity}
+
+TODO: I'm not sure this is the right thing to state yet.
 
 Let $\theta$ be a property of traces $\PID \to (\NewEv \times \OldEv) \to \{0,1\}$, and let $\phi$ be a property of initial inputs $\PID \to (\PID \to \Val) \to \{0,1\}$. Lift $\phi$ and $\theta$ to operate on sets of $\PID$s by defining $\phi\ S\ \tau := \wedge_{i \in S} \phi\ i\ \tau$ and similarly for $\theta$.
 
