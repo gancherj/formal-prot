@@ -5,7 +5,6 @@ type PID = String
 
 data P a b = P a b
 type (+) a b = P a b
-
   
 data Exp (a :: k) where
   EInt :: Int -> Exp Int
