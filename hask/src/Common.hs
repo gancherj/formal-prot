@@ -5,6 +5,9 @@ type PID = String
 
 data P a b = P a b
 type (+) a b = P a b
+
+data AnyT = AnyT
+type Any = AnyT
   
 data Exp (a :: k) where
   EInt :: Int -> Exp Int
@@ -14,8 +17,7 @@ data Exp (a :: k) where
   EUnit :: Exp ()
   ENil :: Exp '[]
   ECons :: Exp a -> Exp xs -> Exp (a ': xs)
-
-data SomeExp = forall a. SomeExp (Exp a)
+  EDyn :: Exp a -> Exp Any
 
 instance TestEquality Exp where
   testEquality (EInt _) (EInt _) = Just Refl
