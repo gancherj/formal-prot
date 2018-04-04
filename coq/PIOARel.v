@@ -1,13 +1,14 @@
 (* Change from Comp to finitely supported distribution, carried by a list of pairs *)
 
 Add LoadPath "~/fcf/src".
-Require Import FCF.FCF.
+Add LoadPath "./Dist".
+Require Import FCF.EqDec.
 Require Import CpdtTactics.
 Require Import List.
 Require Import Coq.Lists.ListSet.
 Require Import SetLems.
-Require Import Dist.
 Require Import PIOA.
+Require Import Dist.
 
 Module PIOARel (L : LAB).
 
@@ -23,15 +24,15 @@ Section RefinePIOADef.
   Context (P1 : @PIOA Q1 I1 O1 H1).
   Context (P2 : @PIOA Q2 I2 O2 H2).
 
-
   Definition refinement := forall acts, exists acts',
-        (comp_fmap (run P1 acts) (traceOf P1)) ~~ (comp_fmap (run P2 acts') (traceOf P2)).
+        (f <- (run P1 acts); ret (traceOf P1 f)) ~~ (f <- (run P2 acts'); ret (traceOf P2 f)).
+
 
 End RefinePIOADef.
 
 (* Without convex combination. *)
 Section SimPIOA.
-  Definition fragConsistent {Q : Set} `{EqDec Q} {I O H} (P : @PIOA Q I O H) (eps : Comp (@Frag Q)) (l : ActList P) := forall x, In x (getSupport eps) -> In x (getSupport (run P l)).
+  Definition fragConsistent {Q : Set} `{EqDec Q} {I O H} (P : @PIOA Q I O H) (eps : Dist (@Frag Q)) (l : ActList P) := forall x, In x (distSupport eps) -> In x (distSupport (run P l)).
   
   Context {Q1 Q2 : Set}.
   Context `{EqDec Q1}.
@@ -41,7 +42,6 @@ Section SimPIOA.
   Context (P2 : @PIOA Q2 I2 O2 H2).
   Context (c : ActList P1 -> loc_lab P1 -> ActList P2).
 
-  Print ActList.
   
   Fixpoint runC (acts : ActList P1) : ActList P2 :=
     match acts with
@@ -50,9 +50,9 @@ Section SimPIOA.
       ActList_app P2 (runC acts') (c acts' a)
     end.
 
-  Record SimR (R : Comp (@Frag Q1) -> Comp (@Frag Q2) -> Prop) :=
+  Record SimR (R : Dist (@Frag Q1) -> Dist (@Frag Q2) -> Prop) :=
     {
-      obs : (forall e1 e2, R e1 e2 -> comp_fmap e1 (traceOf P1) ~~ comp_fmap e2 (traceOf P2));
+      obs : (forall e1 e2, R e1 e2 -> (f <- e1; ret (traceOf P1 f)) ~~ (f <- e2; ret (traceOf P2 f)));
       startcond: (R (ret (FragStart (start P1))) (ret (FragStart (start  P2))));
       stepcond: 
     (forall e1 e2 gamma a, R e1 e2 -> fragConsistent P1 e1 gamma -> fragConsistent P2 e2 (runC gamma) -> R (appAction P1 a e1) (appList P2 e2 (c gamma a)))}.
@@ -127,10 +127,9 @@ Section RefineAssoc.
   Definition A1 := compPIOA P1 (compPIOA P2 P3).
   Definition A2 := compPIOA (compPIOA P1 P2) P3.
   
-  Definition AssocR (e1 : Comp (@Frag (Q1 * (Q2 * Q3)))) (e2 : Comp (@Frag ((Q1 * Q2) * Q3))) :=
-    e1 ~~ (comp_fmap e2 (fun f => Frag_fmap f prodassoc)).
+  Definition AssocR (e1 : Dist (@Frag (Q1 * (Q2 * Q3)))) (e2 : Dist (@Frag ((Q1 * Q2) * Q3))) :=
+    e1 ~~ (f <- e2; ret (Frag_fmap f prodassoc)).
 
-  Check loc_lab.
 
   Definition corr_act (l : loc_lab A1) : loc_lab A2.
   destruct l.
@@ -160,47 +159,27 @@ Section RefineAssoc.
   Check SimR.
   
   Definition SimAssocR: SimR A1 A2 corr AssocR.
+    assert (forall x, traceOf A1 (Frag_fmap x prodassoc) = traceOf A2 x).
+    admit.
     econstructor.
     intros.
-    unfold AssocR in H6.
-    rewrite (comp_fmap_cong _ _ _ H6).
-    unfold comp_fmap.
-    comp_inline leftc.
-    comp_skip.
-    induction x0.
-    simpl.
-    reflexivity.
-    simpl.
-    admit.
-
+    unfold AssocR in H7.
+    rewrite (distBind_cong_l _ _ _ H7).
+    rewrite bindAssoc.
+    apply distBind_cong_r; intros.
+    rewrite bind_ret.
+    rewrite H6.
+    unfold distEquiv; crush.
     unfold AssocR.
-    simpl.
-    unfold sumList.
-    simpl.
+    rewrite bind_ret.
+    admit.
     intros.
-    destruct (EqDec_dec frag_eq (FragStart (start A2)) (FragStart (start A2))).    
-    destruct (EqDec_dec frag_eq (FragStart (start A1)) x).    
-    destruct (EqDec_dec frag_eq (FragStart (prodassoc (start A2))) x).
-    rewrite <- ratAdd_0_l.
-    rewrite ratMult_1_r.
-    reflexivity.
-    admit. (* this is a contradiction I cannot prove until I fix compPIOA *)
-    destruct (EqDec_dec frag_eq (FragStart (prodassoc (start A2))) x).
+    unfold AssocR, appAction.
+    unfold AssocR in H7.
+    rewrite (distBind_cong_l _ _ _ H7).
     admit.
-    rewrite <- ratAdd_0_l.
-    rewrite ratMult_0_r.
-    reflexivity.
-    contradiction.
-
-    intros.
-    induction gamma.
-    simpl.
-    admit.
-    (* Is this provable? *)
-    admit.
-Admitted.
-
-
+  Admitted.
+    
   Lemma implassoc : refinement (compPIOA P1 (compPIOA P2 P3)) (compPIOA (compPIOA P1 P2) P3).
     eapply simSound.
     econstructor.
@@ -264,7 +243,7 @@ Section RefinePIOAEx.
   Lemma refinement_refl : refinement P1 P1.
     unfold refinement.
     intros a; exists a.
-    crush.
+    unfold distEquiv; crush.
   Qed.
 
   Lemma refinement_trans : refinement P1 P2 -> refinement P2 P3 -> refinement P1 P3.
@@ -274,7 +253,8 @@ Section RefinePIOAEx.
     destruct (H4 acts).
     destruct (H5 x).
     exists x0.
-    crush.
+    rewrite H6.
+    apply H7.
   Qed.
 
 End RefinePIOAEx.

@@ -1,11 +1,12 @@
 
 Add LoadPath "~/fcf/src".
-Require Import FCF.FCF.
+Add LoadPath "./Dist".
+Require Import FCF.EqDec.
+Require Import Dist.
 Require Import CpdtTactics.
 Require Import List.
 Require Import Coq.Lists.ListSet.
 Require Import SetLems.
-Require Import Dist.
 
   Module Type LAB.
     Parameter (Lab : Set).
@@ -13,6 +14,7 @@ Require Import Dist.
   End LAB.
                        
 Module PIOADef (L : LAB).  
+
   Global Instance eqd_lab : EqDec (L.Lab).
   apply dec_EqDec; apply L.Lab_eq.
   Defined.
@@ -25,6 +27,7 @@ mkPIOA {
     disjoint : set_disjoint L.Lab_eq I O /\ set_disjoint L.Lab_eq I H /\ set_disjoint L.Lab_eq O H;
     input_enabled : forall q l, set_In l I -> exists c, trans q l = Some c
     }.
+
 
 Definition action {Q : Set} {I O H} (P : @PIOA Q I O H) :=
   set_union L.Lab_eq I (set_union L.Lab_eq O H).
@@ -72,7 +75,7 @@ Section SecPIOA.
     | FragStart  _ => True
     | FragStep  a q f' =>
       (wf_Frag f') /\
-      (exists c, trans P (lastState f') a = Some c /\ In q (getSupport c)) 
+      (exists c, trans P (lastState f') a = Some c /\ In q (distSupport c)) 
     end.
 
     Definition loc_lab := {x : L.Lab | set_In x (loc_action P)}.
@@ -89,17 +92,17 @@ Section SecPIOA.
         ActCons (ActList_app l1 l2') a
       end.
 
-    Definition appAction (a : loc_lab) (c : Comp Frag) : Comp Frag :=
-      f <-$ c;
+    Definition appAction (a : loc_lab) (c : Dist Frag) : Dist Frag := 
+      f <- c;
       match (trans P (lastState f) (proj1_sig a)) with
         | Some mu =>
-            q <-$ mu;
+            q <- mu;
             ret (FragStep (proj1_sig a) q f)
         | Nothing => ret f
       end.
 
     
-    Fixpoint appList (c : Comp Frag) (acts : ActList) :=
+    Fixpoint appList (c : Dist Frag) (acts : ActList) :=
       match acts with
       | ActNil => c
       | ActCons l a => appAction a (appList c l)
@@ -166,18 +169,18 @@ Section CompPIOA.
   Definition comp_hiddens  := 
     set_union L.Lab_eq H1 H2.
 
-  Definition comp_trans (p : (Q1 * Q2)) (l : L.Lab) : option (Comp (Q1 * Q2)) :=
+  Definition comp_trans (p : (Q1 * Q2)) (l : L.Lab) : option (Dist (Q1 * Q2)) :=
     match (trans P1 (fst p) l, trans P2 (snd p) l) with
     | (None, None) => None
     | (Some mu1, None) => Some (
-      x <-$ mu1;
+      x <- mu1;
       ret (x, snd p))
     | (None, Some mu2) => Some (
-        x <-$ mu2;
+        x <- mu2;
         ret (fst p, x))
     | (Some mu1, Some mu2) => Some (
-        x <-$ mu1;
-        y <-$ mu2;
+        x <- mu1; 
+        y <- mu2; 
         ret (x,y))
     end.
 
@@ -202,18 +205,18 @@ Section CompPIOA.
   destruct (input_enabled P1 (fst q) l s) as [ia1 ia2].
   rewrite ia2.
   destruct (trans P2 (snd q) l).
-  exists (x <-$ ia1; y <-$ d; ret (x,y)); crush.
-  exists (x <-$ ia1; ret (x, snd q)); crush.
+  exists (x <- ia1; y <- d; ret (x,y)); crush.
+  exists (x <- ia1; ret (x, snd q)); crush.
 
   destruct (trans P1 (fst q) l).
   destruct (trans P2 (snd q) l).
-  exists (x <-$ d; y <-$ d0; ret (x,y)); crush.
-  exists (x <-$ d; ret (x, snd q)); crush.
+  exists (x <- d; y <- d0; ret (x,y)); crush.
+  exists (x <- d; ret (x, snd q)); crush.
 
   destruct (set_In_dec L.Lab_eq l I2).
   destruct (input_enabled P2 (snd q) l s) as [H6 H7].
   rewrite H7.
-  exists (x <-$ H6; ret (fst q, x)); crush.
+  exists (x <- H6; ret (fst q, x)); crush.
   unfold comp_ins in H4.
   apply set_diff_elim1 in H4.
   apply set_union_elim in H4.
