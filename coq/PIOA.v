@@ -28,6 +28,9 @@ mkPIOA {
     input_enabled : forall q l, set_In l I -> exists c, trans q l = Some c
     }.
 
+Definition Pins {Q : Set} {I O H} (P : @PIOA Q I O H) := I.
+Definition Pouts {Q : Set} {I O H} (P : @PIOA Q I O H) := O.
+Definition Phidden {Q : Set} {I O H} (P : @PIOA Q I O H) := H.
 
 Definition action {Q : Set} {I O H} (P : @PIOA Q I O H) :=
   set_union L.Lab_eq I (set_union L.Lab_eq O H).
@@ -187,16 +190,75 @@ Section CompPIOA.
   Definition compPIOA : @PIOA (Q1 * Q2) comp_ins comp_outs comp_hiddens.
   econstructor.
   apply comp_start.
+  destruct H3 as [D1 D2 D3].
+  destruct (disjoint P1) as [PD1 [PD2 PD3]].
+  destruct (disjoint P2) as [PD4 [PD5 PD6]].
+  unfold comp_ins, comp_outs, comp_hiddens, action in *.
   split.
-  unfold action in *.
-  unfold comp_ins, comp_outs.
-  apply diff_disjoint.
+  unfold set_disjoint.
+  intros; intro.
+  apply set_inter_elim in H4.
+  destruct H4.
+  apply set_diff_elim2 in H4.
+  crush.
   split.
-  unfold comp_ins, comp_outs, comp_hiddens.
-  (* routine lemmas about sets *)
-  admit.
-  admit.
-  admit.
+  unfold set_disjoint; intros; intro.
+  apply set_inter_elim in H4.
+  destruct H4.
+  apply set_union_elim in H5; destruct H5.
+  apply set_diff_iff in H4; destruct H4.
+  apply set_union_elim in H4; destruct H4.
+  unfold set_disjoint in PD2; eapply PD2.
+  apply set_inter_intro.
+  apply H4.
+  crush.
+
+  unfold set_disjoint in D2; eapply D2.
+  apply set_inter_iff.
+  split.
+  apply H5.
+  apply set_union_intro.
+  left; crush.
+
+  apply set_diff_iff in H4.
+  destruct H4.
+  apply set_union_elim in H4; destruct H4.
+  unfold set_disjoint in D3; eapply D3.
+  apply set_inter_iff.
+  split.
+  apply H5.
+  apply set_union_intro.
+  left; crush.
+
+  unfold set_disjoint in PD5; eapply PD5.
+  apply set_inter_intro.
+  apply H4.
+  crush.
+  
+
+  unfold set_disjoint; intros; intro.
+
+  apply set_inter_elim in H4.
+  destruct H4.
+  apply set_union_elim in H4; apply set_union_elim in H5.
+  destruct H4; destruct H5.
+  unfold set_disjoint in PD3; eapply PD3.
+  apply set_inter_intro; [apply H4 | crush].
+
+  unfold set_disjoint in D3; eapply D3.
+  apply set_inter_intro.
+  apply H5.
+  apply set_union_intro.
+  right; apply set_union_intro; left; crush.
+  unfold set_disjoint in D2; eapply D2.
+  apply set_inter_intro.
+  apply H5.
+  apply set_union_intro.
+  right; apply set_union_intro; left; crush.
+
+  unfold set_disjoint in PD6; eapply PD6.
+  apply set_inter_intro; [apply H4 | crush].
+
   intros.
   unfold comp_ins in H3.
   instantiate (1 := comp_trans).
@@ -221,7 +283,7 @@ Section CompPIOA.
   apply set_diff_elim1 in H4.
   apply set_union_elim in H4.
   destruct H4; crush.
-  Admitted.
+  Defined.
   
 End CompPIOA.
 

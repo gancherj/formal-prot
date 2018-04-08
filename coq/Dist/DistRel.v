@@ -1,11 +1,12 @@
 Add LoadPath "~/fcf/src".
 Add LoadPath "../".
-Add LoadPath ".".
 Require Import FCF.Rat.
 Require Import FCF.Fold.
 Require Import FcfLems.
 Require Import CpdtTactics.
+Add LoadPath ".".
 Require Import Dist.
+
 Require Import List.
 
 
@@ -214,3 +215,5 @@ Lemma relFalse {A B : Set} (d1 d2 : A -> Dist B) (Q : B -> B -> Prop) :
   exists (fun _ => nil).
   intros; crush.
 Qed.
+
+  
