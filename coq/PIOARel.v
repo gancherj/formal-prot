@@ -292,7 +292,7 @@ Section RefineAssoc.
       | ActCons _ f a => ActCons A2 (corr_actlist f) (corr_act a)
     end.
 
-  Definition corr (xs : ActList (compPIOA P1 (compPIOA P2 P3))) (a : loc_lab (compPIOA P1 (compPIOA P2 P3))) := ActCons (compPIOA (compPIOA P1 P2) P3) (corr_actlist xs) (corr_act a).
+  Definition corr (xs : ActList (compPIOA P1 (compPIOA P2 P3))) (a : loc_lab (compPIOA P1 (compPIOA P2 P3))) := ActCons (compPIOA (compPIOA P1 P2) P3) (ActNil _) (corr_act a).
 
   Lemma corr_act_R : forall (e1 : Dist (@Frag (Q1 * (Q2 * Q3)))) (e2 : Dist (@Frag ((Q1 * Q2) * Q3))) a,
       AssocR e1 e2 -> AssocR (appAction A1 a e1) (appAction A2 (corr_act a) e2).
@@ -394,30 +394,11 @@ trans P3 (snd (lastState x)) (proj1_sig (corr_act a))).
     (appList A2 (run A2 (runC A1 A2 corr gamma)) (corr gamma a)).
 
   intros.
+
   apply corr_act_R.
-  unfold AssocR in *.
-  rewrite H6.
-  
-  Lemma appList_assoc : forall e l1 l2,
-      appList A2 (appList A2 e l1) l2 ~~
-              (f <- appList A2 e l1;
-               appList A2 (ret f) l2).
-    admit.
-  Admitted.
+  auto.
+  Qed.
 
-  apply distBind_cong_l.
-  induction gamma.
-  simpl.
-  unfold distEquiv; crush.
-  simpl.
-  (* I think there's a problem with this *)
-  admit.
-  Admitted.
-
-
-
-
-  
   Definition SimAssocR: SimR A1 A2 corr AssocR.
     assert (forall x, traceOf A1 (Frag_fmap x prodassoc) = traceOf A2 x).
     intros.
