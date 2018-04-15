@@ -1,5 +1,6 @@
 Require Import Coq.Lists.ListSet.
 Require Import CpdtTactics.
+Require Import List.
 
 
 Definition set_eq {A} (s t : set A) := forall x, set_In x s <-> set_In x t.
@@ -11,6 +12,18 @@ Qed.
 
 Definition set_disjoint {A} (H : forall x y : A, {x=y} + {x <> y}) (s t : set A) :=
   forall x, ~ (set_In x (set_inter H s t)).
+
+Fixpoint allpairs {A} (xs : list A) : list (A * A) :=
+  match xs with
+  | nil => nil
+  | h :: t =>
+    map (fun y => (h,y)) t ++ allpairs t
+  end.
+    
+           
+
+Definition set_pairwise_disjoint {A} (H : forall x y : A, {x=y} + {x <> y}) (xs : list (set A)) :=
+  fold_left (fun acc p => acc /\ set_disjoint H (fst p) (snd p)) (allpairs xs) True.
 
   Lemma set_union_assoc {A : Set} {eqA : forall (x y : A), {x = y} + {x <> y}} : forall (s1 s2 s3 : set A),
       set_eq (set_union eqA s1 (set_union eqA s2 s3)) (set_union eqA (set_union eqA s1 s2) s3).

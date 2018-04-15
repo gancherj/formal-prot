@@ -255,7 +255,63 @@ Lemma distBind_cong_r {A B : Set} (d : Dist A) (c c' : A -> Dist B) :
   exists (r,a); crush.
 Qed.  
 
+Lemma distBind_cong_r_weak {A B : Set} (d : Dist A) (c c' : A -> Dist B) :
+  (forall x, c x ~~ c' x) ->
+  distBind d c ~~ distBind d c'.
+  intros.
+  unfold distBind, distEquiv in *.
+  unfold distJoin; unfold distSum; intros.
+  rewrite map_map.
+  unfold integ; intros.
+  rewrite map_map.
+  rewrite sumList_concat.
+  rewrite sumList_concat.
+  repeat rewrite sumList_map.
+  apply sumList_body_eq; intros.
+  simpl.
+  unfold distScale; simpl.
+  repeat rewrite sumList_map.
+  simpl.
+  unfold integ in H.
+  destruct a; simpl.
+  in_sumList_l.
+  apply ratMult_assoc.
+  rewrite sumList_factor_constant_l.
+  rewrite H.
+  symmetry; in_sumList_l.
+  apply ratMult_assoc.
+  rewrite sumList_factor_constant_l.
+  crush.
+Qed.
 
+Lemma ret_equiv_elim {A : Set} {H : forall (x y : A), {x = y} + {x <> y}} (x y : A) :
+  (ret x) ~~ (ret y) -> x = y.
+  intros.
+  destruct (H x y).
+  auto.
+
+  unfold distEquiv in H0.
+  unfold distRet in H.
+  unfold integ in H; simpl in H.
+  unfold sumList in H; simpl in H.
+  pose proof (H0 (fun a => if H a x then 1 else 0)).
+  unfold integ in H1.
+  unfold sumList in H1; unfold distRet in H1; simpl in *.
+  repeat rewrite <- ratAdd_0_l in H1.
+  repeat rewrite ratMult_1_l in H1.
+  destruct (H x x); destruct (H y x); crush.
+Qed.
+
+Lemma bind_symm {A B C: Set} (d11 d12 : Dist A) (d21 d22 : Dist B) (c1 c2 : A -> B -> Dist C) :
+  (forall x y, c1 x y ~~ c2 x y) -> 
+  d11 ~~ d12 ->
+  d21 ~~ d22 ->
+  (x <- d11; y <- d21; c1 x y) ~~
+  (y <- d22; x <- d12; c2 x y).
+  admit.
+Admitted.
+
+  
 (* Lemmas about well-formedness *)
 
 Lemma join_distmass {A : Set} (d : Dist (Dist A)) : distMass d == 1 -> (forall p, In p (map snd d) -> distMass p == 1) -> distMass (distJoin d) == 1.
