@@ -315,6 +315,7 @@ Section CompImpl.
     rewrite assocRefR.
     reflexivity.
   Qed.
+
 End CompImpl.
   
 
