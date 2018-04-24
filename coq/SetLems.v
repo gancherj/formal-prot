@@ -56,26 +56,40 @@ Definition set_pairwise_disjoint {A} (H : forall x y : A, {x=y} + {x <> y}) (xs 
  Qed.
 
 
-  Lemma set_union_cong_l {A : Set} {eqA : forall (x y : A), {x = y} + {x <> y}} : forall (s1 s2 s3 : set A),
-      set_eq s1 s2 -> set_eq (set_union eqA s1 s3) (set_union eqA s2 s3).
+  Lemma set_union_cong {A : Set} {eqA : forall (x y : A), {x = y} + {x <> y}} : forall (s1 s2 s3 s4 : set A),
+      set_eq s1 s2 -> set_eq s3 s4 -> set_eq (set_union eqA s1 s3) (set_union eqA s2 s4).
     intros; unfold set_eq in *.
-    intros; split; intros;
-    apply set_union_elim in H0; destruct H0 as [H01 | H02].
-    apply H in H01.
-    apply set_union_intro; crush.
-    apply set_union_intro; crush.
-    apply H in H01.
-    apply set_union_intro; crush.
-    apply set_union_intro; crush.
- Qed.
-  Lemma set_union_cong_r {A : Set} {eqA : forall (x y : A), {x = y} + {x <> y}} : forall (s1 s2 s3 : set A),
-      set_eq s1 s2 -> set_eq (set_union eqA s3 s1) (set_union eqA s3 s2).
+    intros; split; intros.
+    apply set_union_elim in H1; destruct H1.
+    apply set_union_intro; left; apply H; crush.
+    apply set_union_intro; right; apply H0; crush.
+
+    apply set_union_elim in H1; destruct H1.
+    apply set_union_intro; left; apply H; crush.
+    apply set_union_intro; right; apply H0; crush.
+  Qed.
+
+  Lemma set_union_symm {A : Set} {eqA : forall (x y : A), {x = y} + {x <> y}} : forall (s1 s2 : set A), set_eq (set_union eqA s1 s2) (set_union eqA s2 s1).
+    intros.
+    unfold set_eq.
+    intros; split; intros H; apply set_union_elim in H; destruct H; apply set_union_intro; crush.
+  Qed.
+
+  Lemma set_diff_cong {A : Set} {eqA : forall (x y : A), {x = y} + {x <> y}} : forall (s1 s2 s3 s4 : set A),
+      set_eq s1 s2 -> set_eq s3 s4 -> set_eq (set_diff eqA s1 s3) (set_diff eqA s2 s4).
+    intros.
+    unfold set_eq; intros; split; intros G; apply set_diff_iff in G; destruct G; apply set_diff_iff.
+    split; [apply H | intro; apply H2; apply H0]; crush.
+    split; [apply H | intro; apply H2; apply H0]; crush.
+  Qed.
+
+  Lemma set_eq_refl : forall {A : Set} (s : set A), set_eq s s.
+    unfold set_eq; crush.
+  Qed.
+
+  Lemma set_eq_trans : forall {A : Set} (s1 s2 s3 : set A), set_eq s1 s2 -> set_eq s2 s3 -> set_eq s1 s3.
     intros; unfold set_eq in *.
-    intros; split; intros;
-    apply set_union_elim in H0; destruct H0 as [H01 | H02].
-    apply set_union_intro; crush.
-    apply set_union_intro; crush.
-    apply H in H02; crush.
-    apply set_union_intro; crush.
-    apply H in H02; apply set_union_intro; crush.
- Qed.
+    split; intros.
+    apply H0; apply H; crush.
+    apply H; apply H0; crush.
+  Qed.

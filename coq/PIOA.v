@@ -385,4 +385,8 @@ Section CompPIOA.
   Defined.
 End CompPIOA.
 
+
+
+Notation "x ||| y" := (compPIOA x y) (at level 51, right associativity).
+
 End PIOADef.
