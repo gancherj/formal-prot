@@ -466,12 +466,89 @@ Qed.
     
 End SimplImplement. 
 
-  
   Add Parametric Relation {L : Set} : (@PIOA L) implement
   reflexivity proved by implrefl 
   transitivity proved by impltrans
                            as implement_rel.
 
+Section SimplImplLabExt.
+  Context (L L' : Set).
+  Context (Lsur : L' -> option L).
+  Context (Linj : L -> L').
+  Context (Linv : forall x, Some x = Lsur (Linj x)).
+ Context (Linv2 : (forall l l', Some l = Lsur l' -> Linj l = l')).
+  Context (P1 P2 : @PIOA L).
+
+  Definition act_lab_corr_lab_ext (f : act_lab P1 -> act_lab P2) : act_lab (lab_ext L L' P1 Lsur) -> act_lab (lab_ext L L' P2 Lsur).
+    intros.
+    destruct H.
+    unfold action in e; simpl in e.
+    destruct (Lsur x).
+    cut (act_lab P2 -> act_lab (lab_ext L L' P2 Lsur)).
+    intro.
+    apply H; apply f.
+    econstructor.
+    apply e.
+
+    intro.
+    destruct H.
+    econstructor.
+    instantiate (1 := Linj x0).
+    unfold action; simpl.
+    rewrite <- Linv.
+    apply e0.
+    crush.
+ Defined.
+
+ Definition lab_ext_frag_corr : forall P, Frag (lab_ext L L' P Lsur) -> Frag P.
+ intros.
+ induction H.
+ apply FragStart.
+ apply p.
+ destruct (Lsur l).
+ apply FragStep.
+ apply l0.
+ apply p.
+ apply IHFrag.
+ apply IHFrag.
+ Defined.
+
+ 
+
+ Lemma lab_ext_traceOf_corr : forall P f,
+     map Linj (traceOf P (lab_ext_frag_corr _ f)) = (traceOf (lab_ext L L' P Lsur) f).
+ intros.
+ induction f.
+ simpl.
+ crush.
+ simpl.
+ unfold ext_action.
+ simpl.
+
+ rewrite <- IHf.
+ remember (Lsur l) as y; destruct y.
+ simpl.
+ unfold ext_action; simpl.
+ destruct (pI P l0 || pO P l0).
+ rewrite map_cons.
+ simpl.
+ rewrite (Linv2 _ _ Heqy).
+ auto.
+
+ auto.
+ simpl.
+ auto.
+ Qed.
+
+
+ Definition sync_R_lab_ext (R : Dist (Frag P1) -> Dist (Frag P2) -> Prop) : Dist (Frag (lab_ext L L' P1 Lsur)) -> Dist (Frag (lab_ext  L L' P2 Lsur)) -> Prop :=
+   fun d1 d2 =>
+     R (x <- d1; ret (lab_ext_frag_corr _ x)) (y <- d2; ret (lab_ext_frag_corr _ y)).
+   
+ End SimplImplLabExt.
+
+
+  
 End PIOARel.
     
 

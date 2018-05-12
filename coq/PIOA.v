@@ -393,9 +393,25 @@ Section CompPIOA.
   
 End CompPIOA.
 
-
-
-
 End PIOADef.
+
+
+Section PIOALabExt.
+  Context (L L' : Set).
+  Context (P : @PIOA L).
+  Context (Lsur : L' -> option L).
+
+  Definition lab_ext : PIOA :=
+    @mkPIOA L' (pQ P) (fun l' =>  match Lsur l' with | Some l => pI P l  | None => false end)
+                      (fun l' =>  match Lsur l' with | Some l => pO P l  | None => false end)
+                      (fun l' => match Lsur l' with | Some l => pH P l | None => false end)
+                      (start P)
+                      (fun s l' =>
+                         match Lsur l' with
+                         | Some l => trans P s l
+                         | None => None
+                      end).
+
+End PIOALabExt.
 
 Notation "x |+| y" := (@compPIOA _ x y) (at level 51, right associativity).
