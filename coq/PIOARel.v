@@ -13,25 +13,22 @@ Require Import SetLems.
 Require Import PIOA.
 Require Import Dist.
 Require Import Program.
+Require Import Bool.
 
 
-Module PIOARel (L : LAB).
+Section PIOARel.
 
-  Module P := PIOADef L.
-  Import P.
-  Import L.
-
-  Definition refinement (P1 P2 : PIOA) := forall acts, exists acts',
+  Definition refinement {L : Set} (P1 P2 : @PIOA L) := forall acts, exists acts',
         (f <- (run P1 acts); ret (traceOf P1 f)) ~~ (f <- (run P2 acts'); ret (traceOf P2 f)).
 
-  Lemma refinement_refl : forall P, refinement P P.
+  Lemma refinement_refl : forall {L  : Set} (P : @PIOA L), refinement P P.
     unfold refinement.
     intros.
     exists acts.
     unfold distEquiv; crush.
   Qed.
 
-  Lemma refinement_trans : forall P Q R, refinement P Q -> refinement Q R -> refinement P R.
+  Lemma refinement_trans : forall {L : Set} (P Q R : @PIOA L), refinement P Q -> refinement Q R -> refinement P R.
     intros.
     unfold refinement in *.
     intro.
@@ -42,195 +39,186 @@ Module PIOARel (L : LAB).
     crush.
   Qed.
 
-  Add Parametric Relation : PIOA refinement
+  Add Parametric Relation {L : Set} : (@PIOA L) refinement
   reflexivity proved by refinement_refl
   transitivity proved by refinement_trans
                            as refine_rel.
 
-  Section CompSymm.
-    Context (P1 P2 : PIOA).
-    Context {eqP1 : EqDec (pQ P1)}.
-    Context {eqP2 : EqDec (pQ P2)}.
-    Check compPIOA.
 
-    Definition symm_loc_lab_corr (l : act_lab (P1 ||| P2)) : act_lab (P2 ||| P1).
+
+(* Without convex combination. *)
+Section SyncSim.
+  Context {L : Set}.
+  Context (P1 P2 : @PIOA L).
+  Context (c : act_lab P1 -> act_lab P2).
+
+
+  Record SyncSimR (R : Dist (Frag P1) -> Dist (Frag P2) -> Prop) :=
+    {
+      sync_obs : (forall e1 e2, R e1 e2 -> (f <- e1; ret (traceOf P1 f)) ~~ (f <- e2; ret (traceOf P2 f)));
+      sync_startcond: (R (ret (FragStart _ (start P1))) (ret (FragStart _ (start  P2))));
+      sync_stepcond: 
+        (forall gamma a, R (run P1 gamma) (run P2 (map c gamma)) -> R (appAction P1 a (run P1 gamma))
+                                                      (appAction P2 (c a) (run P2 (map c gamma))))}.
+      
+      
+  Lemma SyncSimObs : forall R (xs : list (act_lab P1)) a, SyncSimR R ->
+                                   R (run P1 xs) (run P2 (map c xs)) ->
+                                   R (run P1 (a :: xs)) (run P2 ((c a) :: (map c xs))).
+    intros.
+    rewrite run_cons.
+    rewrite run_cons.
+    apply (sync_stepcond _ H).
+    auto.
+  Qed.
+
+  Lemma SyncSymInd : forall R (xs : list (act_lab P1)), SyncSimR R -> R (run P1 xs) (run P2 (map c xs)).
+    intros.
+    induction xs.
+    simpl.
+    unfold run.
+    unfold appList.
+    apply (sync_startcond _ H).
+    simpl.
+    apply SyncSimObs.
+    apply H.
+    auto.
+  Qed.
+  
+  Lemma SyncSimSound : forall R, SyncSimR R -> refinement P1 P2.
+    intros.
+    unfold refinement.
+    intros; exists (map c acts).
+    apply (sync_obs _ H).
+    apply SyncSymInd.
+    auto.
+  Qed.
+
+End SyncSim.
+
+
+  Section CompSymm.
+    Context {L : Set}.
+    Context (P1 P2 : @PIOA L).
+
+    Lemma symm_comp_ins : forall l, comp_ins P1 P2 l = comp_ins P2 P1 l.
+    unfold comp_ins.
+    crush.
+    rewrite orb_comm.
+    rewrite (orb_comm (pO P2 l) (pO P1 l)).
+    crush.
+    Qed.
+
+    Lemma symm_comp_outs : forall l, comp_outs P1 P2 l = comp_outs P2 P1 l.
+      unfold comp_outs; crush.
+      rewrite orb_comm.
+      rewrite (orb_comm (pI P2 l) (pI P1 l)).
+      crush.
+    Qed.
+
+    Lemma symm_comp_hiddens : forall l, comp_hiddens P1 P2 l = comp_hiddens P2 P1 l.
+    unfold comp_hiddens; crush.
+    rewrite (orb_comm (pH P1 l)).
+    destruct (pH P2 l); crush.
+    destruct (pH P1 l); crush.
+    rewrite orb_comm.
+    rewrite andb_comm.
+    rewrite (andb_comm (pI P1 l)).
+    crush.
+    Qed.
+
+    Definition symm_lab_corr (l : act_lab (P1 |+| P2)) : act_lab (P2 |+| P1).
       unfold act_lab in *; simpl in *; unfold action in *; simpl in *.
-      unfold comp_ins, comp_outs, comp_hiddens in *.
-      destruct l.
-      econstructor.
-      apply set_union_elim in s; destruct s.
-      apply set_union_intro; left.
-      eapply set_diff_cong.
-      apply set_union_symm.
-      apply set_union_symm.
-      apply H.
-      apply set_union_intro; right.
-      eapply set_union_cong.
-      apply set_union_symm.
-      apply set_union_symm.
-      auto.
+      destruct l; econstructor; instantiate (1 := x).
+      rewrite <- symm_comp_ins.
+      rewrite <- symm_comp_outs.
+      rewrite <- symm_comp_hiddens.
+      apply e.
     Defined.
-    
-    Fixpoint symm_fragCorr (xs : Frag (compPIOA P2 P1)) : Frag (compPIOA P1 P2) :=
+
+    Fixpoint symm_fragCorr (xs : Frag (P2 |+| P1)) : Frag (P1  |+| P2) :=
       match xs with
       | FragStart _ (p2,p1) => FragStart (compPIOA P1 P2) (p1,p2)
       | FragStep _ l (p2,p1) f =>
         FragStep (compPIOA P1 P2) l (p1,p2) (symm_fragCorr f)
       end.
 
+    Lemma symm_refine : refinement (P1 |+| P2) (P2 |+| P1).
+    apply (SyncSimSound _ _ symm_lab_corr (fun x y => x ~~ (y0 <- y; ret symm_fragCorr y0))).
+    assert (forall x, traceOf (P1 |+| P2) (symm_fragCorr x) = traceOf (P2 |+| P1) x).
+    induction x; simpl; destruct p; crush.
+    unfold ext_action; simpl.
+    rewrite <- symm_comp_ins.
+    rewrite <- symm_comp_outs.
+    crush.
+    crush.
 
-    Fixpoint symm_actCorr (xs : ActList (compPIOA P1 P2)) : ActList (compPIOA P2 P1) :=
-      match xs with
-      | ActNil _ => ActNil _
-      | ActCons _ xs x => ActCons _ (symm_actCorr xs) (symm_loc_lab_corr x)
-      end.
-                      
+    econstructor.
+    intros.
+    rewrite (distBind_cong_l _ _ _ H0).
+    rewrite bindAssoc.
+    apply distBind_cong_r; intros.
+    rewrite bind_ret.
+    rewrite H.
+    unfold distEquiv; crush.
+    simpl.
+    rewrite bind_ret.
+    simpl.
+    unfold comp_start; simpl.
+    unfold distEquiv; crush.
+
+    intros.
+    unfold appAction.
+    rewrite (distBind_cong_l _ _ _ H0).
+    repeat rewrite bindAssoc.
+    apply distBind_cong_r; intros.
+    rewrite bind_ret.
+    simpl.
+    unfold comp_trans; simpl.
+    destruct a; simpl.
+    assert (forall x, lastState (P2 |+| P1) x = (fun p => (snd p, fst p)) (lastState (P1 |+| P2) (symm_fragCorr x))).
+    induction x1; destruct p; crush.
+    rewrite H2; simpl.
+    destruct (lastState (P1 |+| P2) (symm_fragCorr x)); simpl.
+
     
-    Lemma refSymm : refinement (compPIOA P1 P2) (compPIOA P2 P1).
-      unfold refinement; intros.
+    destruct (trans P1 p x0); destruct (trans P2 p0 x0).
+    assert ((x0 <- d; y <- d0; ret (x0, y)) ~~ (y <- d0; x0 <- d; ret (x0, y))).
+    apply bind_symm; intros; unfold distEquiv; crush.
+    rewrite (distBind_cong_l _ _ _ H3).
+    repeat rewrite bindAssoc.
+    apply distBind_cong_r; intros.
+    repeat rewrite bindAssoc.
+    apply distBind_cong_r; intros.
+    repeat rewrite bind_ret.
+    simpl; unfold distEquiv; crush.
 
+    repeat rewrite bindAssoc.
+    apply distBind_cong_r; intros.
+    repeat rewrite bind_ret.
+    simpl; unfold distEquiv; crush.
 
-      cut ((run (compPIOA P1 P2) acts) ~~ (f <- run (compPIOA P2 P1) (symm_actCorr acts); ret (symm_fragCorr f))).
+    repeat rewrite bindAssoc.
+    apply distBind_cong_r; intros.
+    repeat rewrite bind_ret.
+    simpl; unfold distEquiv; crush.
 
-      intros.
-      
-      exists (symm_actCorr acts).
-      rewrite (distBind_cong_l _ _ _ H).
-      rewrite bindAssoc.
-
-      apply distBind_cong_r_weak; intros.
-      rewrite bind_ret.
-      induction x.
-      unfold symm_fragCorr.
-      destruct p; simpl; unfold distEquiv; crush.
-      Check frag_eq.
-
-
-      pose proof (@ret_equiv_elim _ (EqDec_dec (list_EqDec eqd_lab))).
-      apply H0 in IHx.
-      simpl.
-      destruct p.
-      simpl.
-      rewrite IHx.
-      destruct (set_In_dec (EqDec_dec eqd_lab) l (ext_action (compPIOA P1 P2)));
-      destruct (set_In_dec (EqDec_dec eqd_lab) l (ext_action (compPIOA P2 P1))).
-      unfold distEquiv;
-      crush.
-      unfold ext_action in *.
-      simpl in *.
-
-      unfold comp_ins, comp_outs in *.
-
-      exfalso.
-      apply n.
-      apply set_union_elim in s; destruct s.
-      apply set_union_intro; left; eapply set_diff_cong.
-      (* HERE *)
-      apply set_union_symm.
-      apply set_union_symm.
-      apply H1.
-      apply set_union_intro; right.
-      apply set_union_symm; apply H1.
-
-      exfalso.
-      apply n.
-      unfold ext_action in *; simpl in *; unfold comp_ins, comp_outs in *; simpl in *.
-      eapply set_union_cong.
-      eapply set_diff_cong.
-      apply set_union_symm.
-      apply set_union_symm.
-      apply set_union_symm.
-      apply s.
-      unfold distEquiv; crush.
-
-      induction acts.
-      unfold run; simpl.
-      rewrite bind_ret.
-      simpl.
-      unfold comp_start.
-      unfold distEquiv; crush.
-      rewrite run_cons.
-      unfold appAction.
-      simpl.
-      rewrite (distBind_cong_l _ _ _ IHacts).
-      rewrite bindAssoc.
-      rewrite run_cons.
-      unfold appAction.
-      rewrite bindAssoc.
-      apply distBind_cong_r_weak; intros.
-      rewrite bind_ret.
-      simpl.
-      unfold comp_trans.
-      destruct a.
-      simpl.
-      assert (trans P1 (fst (lastState (compPIOA P1 P2) (symm_fragCorr x))) x0 =
-              trans P1 (snd (lastState (compPIOA P2 P1) x)) x0).
-      induction x; simpl; destruct p; simpl; auto.
-
-      assert (trans P2 (snd (lastState (compPIOA P1 P2) (symm_fragCorr x))) x0 =
-              trans P2 (fst (lastState (compPIOA P2 P1) x)) x0).
-      induction x; simpl; destruct p; simpl; auto.
-
-      repeat rewrite H; repeat rewrite H0.
-      destruct (trans P1 (snd (lastState (compPIOA P2 P1) x)) x0).
-      destruct (trans P2 (fst (lastState (compPIOA P2 P1) x)) x0).
-      repeat rewrite bindAssoc.
-
-      cut ((y <- d; (y0 <- d0; ret (y, y0))) ~~ (y <- d0; (y0 <- d; ret (y0, y)))).
-      intro.
-      rewrite <- bindAssoc.
-      rewrite (distBind_cong_l _ _ _ H1).
-      rewrite bindAssoc.
-      apply distBind_cong_r; intros.
-      repeat rewrite bindAssoc.
-      apply distBind_cong_r; intros.
-      repeat rewrite bind_ret.
-      simpl.
-      unfold distEquiv; crush.
-      apply bind_symm.
-      intros; unfold distEquiv; crush.
-      intros; unfold distEquiv; crush.
-      intros; unfold distEquiv; crush.
-      Ltac dsimp := try apply distBind_cong_r; intros; repeat rewrite bindAssoc; try rewrite bind_ret.
-      repeat dsimp.
-      simpl.
-      induction x; simpl; destruct p; simpl; auto.
-      unfold distEquiv; crush.
-      unfold distEquiv; crush.
-      destruct (trans P2 (fst (lastState (compPIOA P2 P1) x)) x0).
-      repeat rewrite bindAssoc.
-      apply distBind_cong_r; intros.
-      repeat rewrite bind_ret.
-      simpl.
-      induction x; simpl; destruct p; simpl; auto.
-      unfold distEquiv; crush.
-      unfold distEquiv; crush.
-
-      rewrite bind_ret; unfold distEquiv; crush.
-
-      Qed.
+    repeat rewrite bind_ret.
+    simpl; unfold distEquiv; crush.
+    Qed.
 
 End CompSymm.
 
 Section CompAssoc.
-  Context (P1 P2 P3 : PIOA).
+  Context {L : Set}.
+  Context (P1 P2 P3 : @PIOA L).
 
 
-  Definition assoc_loc_lab_corr (l : act_lab (P1 ||| (P2 ||| P3))) : act_lab ((P1 ||| P2) ||| P3).
-    destruct l.
-    unfold action in s.
-    econstructor.
-    unfold action.
-    simpl in *.
-    unfold comp_ins, comp_outs, comp_hiddens in *; simpl in *; unfold comp_ins, comp_outs, comp_hiddens in *; simpl in *.
-    admit.
-  Admitted.
-
-    Lemma assocRefR : refinement (compPIOA P1 (compPIOA P2 P3)) (compPIOA (compPIOA P1 P2) P3).
+    Lemma assocRefR : refinement (P1 |+| (P2 |+| P3)) ((P1 |+| P2) |+| P3).
       admit.
     Admitted.
 
-    Lemma assocRefL : refinement  (compPIOA (compPIOA P1 P2) P3) (compPIOA P1 (compPIOA P2 P3)).
+    Lemma assocRefL : refinement ((P1 |+| P2) |+| P3) (P1 |+| (P2 |+| P3)).
       admit.
     Admitted.
 
@@ -238,15 +226,16 @@ End CompAssoc.
       
 (* Without convex combination. *)
 Section SimPIOA.
-  Context (P1 P2 : PIOA).
-  Context (c : ActList P1 -> act_lab P1 -> ActList P2).
+  Context {L : Set}.
+  Context (P1 P2 : @PIOA L).
+  Context (c : list (act_lab P1) -> (act_lab P1) -> list (act_lab P2)).
 
   
-  Fixpoint runC (acts : ActList P1) : ActList P2 :=
+  Fixpoint runC (acts : list (act_lab P1)) : list (act_lab P2) :=
     match acts with
-    | ActNil _ => ActNil P2
-    | ActCons _ acts' a =>
-      ActList_app P2 (runC acts') (c acts' a)
+    | nil => nil
+    | a :: acts' =>
+      (c acts' a) ++ (runC acts')
     end.
 
   Record SimR (R : Dist (Frag P1) -> Dist (Frag P2) -> Prop) :=
@@ -257,9 +246,9 @@ Section SimPIOA.
     (forall gamma a, R (run P1 gamma) (run P2 (runC gamma)) -> R (appAction P1 a (run P1 gamma)) (appList P2 (run P2 (runC gamma)) (c gamma a)))}.
       
       
-  Lemma simInd : forall R (xs : ActList P1) a, SimR R ->
+  Lemma simInd : forall R (xs : list (act_lab P1)) a, SimR R ->
                                    R (run P1 xs) (run P2 (runC xs)) ->
-                                   R (run P1 (xs ::> a)) (run P2 ((runC xs) +++ (c xs a))).
+                                   R (run P1 (a :: xs)) (run P2 ((c xs a) ++ (runC xs))).
     intros.
     rewrite run_cons.
     rewrite run_app.
@@ -267,7 +256,7 @@ Section SimPIOA.
     auto.
   Qed.
 
-  Lemma simInv : forall R (xs : ActList P1), SimR R -> R (run P1 xs) (run P2 (runC xs)).
+  Lemma simInv : forall R xs, SimR R -> R (run P1 xs) (run P2 (runC xs)).
     intros.
     induction xs.
     simpl.
@@ -294,42 +283,43 @@ End SimPIOA.
 
     
 Section ImplPIOA.
-  Context (P1 P2 : PIOA).
+  Context {L : Set}.
+  Context (P1 P2 : @PIOA L).
 
   
-  Definition impl := forall (P : PIOA),
+  Definition implement := forall (P : PIOA),
       refinement (compPIOA P1 P) (compPIOA P2 P).
 
 End ImplPIOA.
 
 Section CompImpl.
-  Context (P1 P2 P3 : PIOA).
+  Context {L : Set}.
+  Context (P1 P2 P3 : @PIOA L).
 
   Lemma implrefl :
-    impl P1 P1.
-    intros; unfold impl; intros.
+    implement P1 P1.
+    intros; unfold implement; intros.
     reflexivity.
   Qed.
 
   Lemma impltrans :
-    impl P1 P2 -> impl P2 P3 -> impl P1 P3.
-    intros; unfold impl in *; intros.
+    implement P1 P2 -> implement P2 P3 -> implement P1 P3.
+    intros; unfold implement in *; intros.
     rewrite (H P).
     apply H0.
   Qed.
     
 
-  Lemma implcomp :
-    impl P1 P2 -> impl (compPIOA P1 P3) (compPIOA P2 P3).
+  Lemma implementcomp :
+    implement P1 P2 -> implement (compPIOA P1 P3) (compPIOA P2 P3).
     intros.
-    unfold impl in *.
+    unfold implement in *.
     intros.
     rewrite (assocRefL P1 P3 P).
     rewrite (H (compPIOA P3 P)).
     rewrite assocRefR.
     reflexivity.
   Qed.
-
 
 
 End CompImpl.
@@ -339,8 +329,9 @@ Definition option_lift {A B} (P : A -> B -> Prop) (x : option A) (y : option B) 
   (exists c1 c2,
       x = Some c1 /\ y = Some c2 /\ P c1 c2).
 
-Section SimplImpl.
-  Context (P1 P2 : PIOA).
+Section SimplImplement.
+  Context {L : Set}.
+  Context (P1 P2 : @PIOA L).
   Context (lab_eq1 : pI P1 = pI P2).
   Context (lab_eq2 : pO P1 = pO P2).
   Context (lab_eq3 : pH P1 = pH P2).
@@ -353,25 +344,21 @@ Section SimplImpl.
 
   
 
-  Definition simpl_lab_corr : forall P, act_lab (P1 ||| P) -> act_lab (P2 ||| P).
+  Definition simpl_lab_corr : forall P, act_lab (P1 |+| P) -> act_lab (P2 |+| P).
     intros.
     destruct H.
     econstructor.
     unfold action in *; simpl in *; unfold comp_ins, comp_hiddens, comp_outs in *.
-  rewrite lab_eq1 in s.
-  rewrite lab_eq2 in s.
-  rewrite lab_eq3 in s.
-  apply s.
+  repeat rewrite lab_eq1 in e.
+  repeat rewrite lab_eq2 in e.
+  repeat rewrite lab_eq3 in e.
+  apply e.
   Defined.
 
-  Fixpoint simpl_actlist_corr (P : PIOA) (al : ActList (P1 ||| P)) :=
-      match al with
-      | ActNil _ => ActNil _
-      | ActCons _ al' l =>
-        ActCons _ (simpl_actlist_corr _ al') (simpl_lab_corr _ l)
-      end.
+  Fixpoint simpl_actlist_corr (P : PIOA) (al : list (act_lab (P1 |+| P))) :=
+    map (simpl_lab_corr P) al.
 
-  Definition simpl_frag_corr (P : PIOA) (f : Frag (P1 ||| P)) : Frag (P2 ||| P).
+  Definition simpl_frag_corr (P : PIOA) (f : Frag (P1 |+| P)) : Frag (P2 |+| P).
     induction f.
     apply FragStart.
     simpl in p.
@@ -387,162 +374,103 @@ Section SimplImpl.
     apply IHf.
   Defined.
 
-  Definition simpl_simR : forall P, Dist (Frag (P1 ||| P)) -> Dist (Frag (P2 ||| P)) -> Prop :=
+  Lemma simpl_frag_corr_correct (P : PIOA) (f : Frag (P1 |+| P)) :
+    traceOf _ (simpl_frag_corr _ f) = traceOf _ f.
+  induction f.
+  simpl; unfold distEquiv; crush.
+  simpl.
+  rewrite IHf.
+  unfold ext_action; simpl; unfold comp_ins, comp_outs.
+  rewrite lab_eq1.
+  rewrite lab_eq2.
+  auto.
+  Qed.
+
+  Definition simpl_simR : forall P, Dist (Frag (P1 |+| P)) -> Dist (Frag (P2 |+| P)) -> Prop :=
     fun _ e1 e2 =>
       (x <- e1; ret (simpl_frag_corr _ x)) ~~ e2.
 
-  Definition simpl_corr : forall P, ActList (P1 ||| P) -> act_lab (P1 ||| P) -> ActList (P2 ||| P) :=
-    fun _ _ l => ActCons _ (ActNil _) (simpl_lab_corr _ l).
-
-  Lemma simpl_sim : forall P, SimR (P1 ||| P) (P2 ||| P) (simpl_corr P) (simpl_simR P).
-    econstructor.
+  Lemma simpl_sim : forall P, SyncSimR (P1 |+| P) (P2 |+| P) (simpl_lab_corr P) (simpl_simR P).
+  intros; constructor.
+  intros.
+  unfold simpl_simR in H.
+  symmetry in H.
+  rewrite (distBind_cong_l _ _ _ H).
+  rewrite bindAssoc.
+  apply distBind_cong_r; intros.
+  rewrite bind_ret; simpl.
+  rewrite simpl_frag_corr_correct.
+  unfold distEquiv; crush.
+  unfold simpl_simR; simpl.
+  rewrite bind_ret.
+  simpl.
+  unfold comp_start; simpl.
+  rewrite start_corr.
+  unfold distEquiv; crush.
+  intros.
+  unfold simpl_simR in *.
+  unfold appAction.
+  symmetry; symmetry in H.
+  rewrite (distBind_cong_l _ _ _ H).
+  repeat rewrite bindAssoc.
+  apply distBind_cong_r; intros.
+  rewrite bind_ret.
+  simpl.
+  unfold comp_trans; simpl.
+  assert (forall x, lastState (P2 |+| P) (simpl_frag_corr P x) =
+          ((st_corr (fst (lastState _ x)), snd (lastState _ x)))).
+  induction x0; crush.
+  rewrite H1; simpl.
+  destruct (lastState (P1 |+| P) x); simpl.
+  destruct a; simpl.
+  unfold option_lift in trans_corr.
+  destruct (trans_corr p x0).
+  destruct H2.
+  rewrite H2, H3.
+  destruct (trans P p0 x0).
+  repeat rewrite bindAssoc.
+  apply distBind_cong_r; intros; repeat rewrite bind_ret; simpl.
+  unfold distEquiv; crush.
+  rewrite bind_ret; unfold distEquiv; crush.
+  destruct H2.
+  destruct H2.
+  destruct H2.
+  destruct H3.
+  rewrite H2, H3.
+  destruct (trans P p0 x0).
+  repeat rewrite bindAssoc.
+  symmetry in H4.
+  rewrite (distBind_cong_l _ _ _ H4).
+  repeat rewrite bindAssoc.
+  apply distBind_cong_r; intros.
+  rewrite bind_ret; repeat rewrite bindAssoc.
+  apply distBind_cong_r; intros.
+  repeat rewrite bind_ret.
+  simpl.
+  unfold distEquiv; crush.
+  rewrite bindAssoc.
+  symmetry in H4.
+  rewrite (distBind_cong_l _ _ _ H4).
+  repeat rewrite bindAssoc.
+  apply distBind_cong_r; intros.
+  repeat rewrite bind_ret; simpl.
+  unfold distEquiv; crush.
+Qed.  
+  
+  Lemma simpl_implement : implement P1 P2.
+    unfold implement.
     intros.
-    unfold simpl_simR in H.
-    symmetry in H; symmetry.
-    rewrite (distBind_cong_l _ _ _ H).
-    rewrite bindAssoc.
-    apply distBind_cong_r; intros.
-    rewrite bind_ret.
-    induction x.
-    simpl.
-    unfold distEquiv; crush.
-    simpl.
-    assert (ext_action (P2 ||| P) = ext_action (P1 ||| P)).
-    unfold ext_action in *.
-    simpl.
-    unfold comp_ins, comp_outs.
-    rewrite lab_eq1.
-    rewrite lab_eq2.
-    crush.
-
-    assert (forall x, traceOf (P2 ||| P) (simpl_frag_corr _ x) = traceOf _ x).
-    induction x0.
-    crush.
-    simpl.
-    crush.
-
-    rewrite H2.
-    rewrite H1.
-    unfold distEquiv; crush.
-
-    simpl.
-    unfold simpl_simR in *.
-    rewrite bind_ret.
-    simpl.
-    crush.
-    unfold comp_start.
-    unfold distEquiv; crush.
-
-
-    
-    intros.
-    unfold simpl_simR in *.
-    simpl.
-    unfold appAction.
-    symmetry in H.
-    symmetry.
-    rewrite (distBind_cong_l _ _ _ H); clear H.
-    repeat rewrite bindAssoc.
-
-    apply distBind_cong_r; intros.
-    clear H.
-    repeat rewrite bind_ret.
-
-    generalize x.
-    simpl.
-    intro.
-    unfold comp_trans.
-    unfold option_lift in trans_corr.
-    induction x0.
-    simpl.
-    destruct a; simpl.
-    destruct (trans_corr (fst p) x0).
-    destruct H.
-    rewrite H.
-    rewrite H0.
-    destruct (trans P (snd p) x0).
-    repeat rewrite bindAssoc.
-    apply distBind_cong_r; intros.
-    repeat rewrite bind_ret; simpl.
-    unfold distEquiv; crush.
-    repeat rewrite bind_ret; simpl.
-    unfold distEquiv; crush.
-    destruct H.
-    destruct H.
-    destruct H.
-    destruct H0.
-    rewrite H; rewrite H0.
-    destruct (trans P (snd p) x0).
-    repeat rewrite bindAssoc.
-    symmetry in H1.
-    rewrite (distBind_cong_l _ _ _  H1).
-    rewrite bindAssoc.
-    apply distBind_cong_r; intros.
-    rewrite bind_ret.
-    repeat rewrite bindAssoc; apply distBind_cong_r; intros.
-    repeat rewrite bind_ret.
-    simpl.
-    unfold distEquiv; crush.
-    repeat rewrite bindAssoc.
-    symmetry in H1.
-    rewrite (distBind_cong_l _ _ _  H1).
-    repeat rewrite bindAssoc.
-    apply distBind_cong_r; intros; repeat rewrite bind_ret.
-    simpl.
-    unfold distEquiv; crush.
-    simpl.
-    destruct a; simpl.
-    destruct (trans_corr (fst p) x1).
-    destruct H.
-    rewrite H.
-    rewrite H0.
-    destruct (trans P (snd p) x1).
-    repeat rewrite bindAssoc.
-    apply distBind_cong_r; intros.
-    repeat rewrite bind_ret; simpl.
-    unfold distEquiv; crush.
-    repeat rewrite bind_ret; simpl.
-    unfold distEquiv; crush.
-    destruct H.
-    destruct H.
-    destruct H.
-    destruct H0.
-    rewrite H; rewrite H0.
-    destruct (trans P (snd p) x1).
-    repeat rewrite bindAssoc.
-    symmetry in H1.
-    rewrite (distBind_cong_l _ _ _  H1).
-    rewrite bindAssoc.
-    apply distBind_cong_r; intros.
-    rewrite bind_ret.
-    repeat rewrite bindAssoc; apply distBind_cong_r; intros.
-    repeat rewrite bind_ret.
-    simpl.
-    unfold distEquiv; crush.
-    repeat rewrite bindAssoc.
-    symmetry in H1.
-    rewrite (distBind_cong_l _ _ _  H1).
-    repeat rewrite bindAssoc.
-    apply distBind_cong_r; intros; repeat rewrite bind_ret.
-    simpl.
-    unfold distEquiv; crush.
-  Qed.
-                                                                                        
-
-  Lemma simpl_impl : impl P1 P2.
-    unfold impl.
-    intros.
-    eapply simSound.
+    eapply SyncSimSound.
     apply simpl_sim.
   Qed.
     
-End SimplImpl. 
+End SimplImplement. 
 
   
-  Add Parametric Relation : PIOA impl
+  Add Parametric Relation {L : Set} : (@PIOA L) implement
   reflexivity proved by implrefl 
   transitivity proved by impltrans
-                           as impl_rel.
+                           as implement_rel.
 
 End PIOARel.
     

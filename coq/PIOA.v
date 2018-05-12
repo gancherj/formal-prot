@@ -5,48 +5,54 @@ Require Import FCF.EqDec.
 Require Import Dist.
 Require Import CpdtTactics.
 Require Import List.
-Require Import Coq.Lists.ListSet.
+Require Import Bool.
 Require Import SetLems.
 
-  Module Type LAB.
-    Parameter (Lab : Set).
-    Parameter (Lab_eq : eq_dec Lab).
-  End LAB.
-                       
-Module PIOADef (L : LAB).  
-
-  Global Instance eqd_lab : EqDec (L.Lab).
-  apply dec_EqDec; apply L.Lab_eq.
-  Defined.
-  
+Section PIOADef.
+  Context {Lab : Set}.
+  Context `{eqLab : EqDec Lab}.
   
 Record PIOA :=
 mkPIOA {
     pQ : Set;
-    pI : set L.Lab;
-    pO : set L.Lab;
-    pH : set L.Lab;
+    pI : Lab -> bool;
+    pO : Lab -> bool;
+    pH : Lab -> bool;
     start : pQ;
-    trans : pQ -> L.Lab -> option (Dist pQ);
+    trans : pQ -> Lab -> option (Dist pQ);
     }.
+
+Definition disjoint (f g : Lab -> bool) := forall x,
+    (f x = true -> g x = false) /\
+    (g x = true -> f x = false).
+
+Definition pairwise_disjoint (f g h : Lab -> bool) := forall x,
+    (f x = true -> (g x = false /\ h x = false)) /\
+    (g x = true -> (h x = false /\ g x = false)) /\
+    (h x = true -> (f x = false /\ f x = false)). 
+
+
 
 Class wfPIOA (P : PIOA) :=
   {
-    disjoint : set_pairwise_disjoint L.Lab_eq ((pI P) :: (pO P) :: (pH P) :: nil);
-    input_enabled : forall q l, set_In l (pI P) -> exists c, (trans P) q l = Some c;
-    trans_wf : forall q l c, (trans P) q l = Some c ->
-                             (set_In l (pI P) \/ set_In l (pO P) \/ set_In l (pH P))
+    disjoint_labs : pairwise_disjoint (pI P) (pO P) (pH P);
+    input_enabled : forall q l, (pI P) l = true -> exists c, (trans P) q l = Some c;
+    trans_wf : forall q l c, ((trans P) q l = Some c ->
+                              (pI P l = true \/ pO P l = true \/ pH P l = true)) /\
+                             ((pI P l = false /\ pO P l = false /\ pH P l = false) -> trans P q l = None)
   }.
 
 
-Definition action (P : PIOA) :=
-  set_union L.Lab_eq (pI P) (set_union L.Lab_eq (pO P) (pH P)).
 
-Definition ext_action (P : PIOA) :=
-  set_union L.Lab_eq (pI P) (pO P).
 
-Definition loc_action (P : PIOA) :=
-  set_union L.Lab_eq (pO P) (pH P).
+Definition action (P : PIOA) (l : Lab) :=
+  (pI P l || pO P l) || pH P l.
+  
+Definition ext_action (P : PIOA) l :=
+  pI P l || pO P l.
+
+Definition loc_action (P : PIOA) l :=
+  pO P l || pH P l.
 
 Section SecPIOA.
   Context (P : PIOA).
@@ -54,7 +60,7 @@ Section SecPIOA.
     
     Inductive Frag :=
     | FragStart : pQ P -> Frag 
-    | FragStep : L.Lab -> pQ P -> Frag  -> Frag .
+    | FragStep : Lab -> pQ P -> Frag  -> Frag .
 
   Global Instance frag_eq : EqDec Frag.
   apply dec_EqDec; unfold eq_dec; decide equality; apply EqDec_dec; auto; try apply eqd_lab.
@@ -82,23 +88,12 @@ Section SecPIOA.
       (exists c, trans P (lastState f') a = Some c /\ In q (distSupport c)) 
     end.
 
-    Definition loc_lab := {x : L.Lab | set_In x (loc_action P)}.
-    Definition act_lab := {x : L.Lab | set_In x (action P)}.
+    Definition loc_lab := {x : Lab | (loc_action P) x = true}.
+    Definition act_lab := {x : Lab | (action P) x = true}.
 
+    (* In the paper they use loc_lab below where I use act_lab. is this an important difference? *)
     
-    (* NOTE: these correspond to the task schedules. Here I am allowing for input actions to also be included. (In the paper, only locally controlled actions are considered.) This I believe will allow for compositional reasoning. I think this is a safe generalization. *)
-    Inductive ActList :=
-    | ActNil : ActList
-    | ActCons : ActList -> act_lab -> ActList.
-
-
-    Fixpoint ActList_app (l1 l2 : ActList) :=
-      match l2 with
-      | ActNil => l1
-      | ActCons l2' a =>
-        ActCons (ActList_app l1 l2') a
-      end.
-
+    (* the label only gets added to the frag if the process accepts it. *)
     Definition appAction (a : act_lab) (c : Dist Frag) : Dist Frag := 
       f <- c;
       match (trans P (lastState f) (proj1_sig a)) with
@@ -109,44 +104,63 @@ Section SecPIOA.
       end.
 
     
-    Fixpoint appList (c : Dist Frag) (acts : ActList) :=
+    (* Earlier actions are applied later *)
+    Fixpoint appList (c : Dist Frag) (acts : list (act_lab)) :=
       match acts with
-      | ActNil => c
-      | ActCons l a => appAction a (appList c l)
-        end.
+      | nil => c
+      | l :: acts' =>
+        appAction l (appList c acts')
+                  end.
 
 
-    Definition run (acts : ActList) := appList (ret (FragStart (start P))) acts.
+    Definition run (acts : list act_lab) : Dist Frag := appList (ret (FragStart (start P))) acts.
 
-    Lemma run_cons : forall a acts, run (ActCons acts a) = appAction a (run acts).
+    Lemma run_cons : forall a acts, run (a :: acts) = appAction a (run acts).
       unfold run; simpl; auto.
       Qed.
 
 
-    Lemma run_app : forall acts acts', run (ActList_app acts acts') = appList (run acts) acts'.
-      induction acts'; [simpl; auto |
-                        simpl; rewrite <- IHacts'; rewrite run_cons; auto].
-      Qed.
+    Lemma run_app : forall acts acts', run (acts ++ acts') = appList (run acts') acts.
+      induction acts; simpl.
+      auto.
+      intro.
+      rewrite run_cons.
+      rewrite IHacts.
+      auto.
+    Qed.
     
     Fixpoint traceOf (f : Frag) :=
       match f with
       | FragStart q => nil
       | FragStep a q f' =>
-        if (set_In_dec (EqDec_dec _) a (ext_action P)) then a :: (traceOf f') else traceOf f'
+        if ((ext_action P) a) then a :: (traceOf f') else traceOf f'
       end.
 
 End SecPIOA.            
 
-    Notation "x ::> y" := (ActCons _ x y) (at level 90).
-    Notation "x +++ y" := (ActList_app _ x y) (at level 50).
 
 Class Compatible (P1 P2 : PIOA) :=
   {
-    disjoint_outs : set_disjoint L.Lab_eq (pO P1) (pO P2);
-    disjoint_h_l : set_disjoint L.Lab_eq (pH P1) (action P2);
-    disjoint_h_r : set_disjoint L.Lab_eq (pH P2) (action P1)
-                                }.
+    disjoint_outs : disjoint (pO P1) (pO P2);
+    disjoint_ins : disjoint (pI P1) (pI P2);
+    disjoint_h_l : disjoint (pH P1) (action P2);
+    disjoint_h_r : disjoint (pH P2) (action P1)
+  }.
 
+Class Comparable (P1 P2 : PIOA) :=
+  {
+    equal_ins : forall l, pI P1 l = pI P2 l;
+    equal_outs : forall l, pO P1 l = pO P2 l;
+    disjoint_hiddens_l : disjoint (pH P1) (action P2);
+    disjoint_hiddens_r : disjoint (pH P2) (action P1);
+    }.
+
+Lemma compatible_comparable : forall P1 P2 P3,
+    Compatible P1 P3 ->
+    Comparable P1 P2 ->
+    Compatible P2 P3.
+
+Admitted.
                                         
     
       
@@ -157,14 +171,15 @@ Section CompPIOA.
 
   Definition comp_start := (start P1, start P2).
 
-  Definition comp_ins  :=
-    set_diff L.Lab_eq (set_union L.Lab_eq (pI P1) (pI P2)) (set_union L.Lab_eq (pO P1) (pO P2)).
+  Definition comp_ins l :=
+    (pI P1 l || pI P2 l) && (negb (pO P1 l || pO P2 l)).
+    
+  Definition comp_outs l :=
+    (pO P1 l || pO P2 l) && (negb (pI P1 l || pI P2 l)).
 
-  Definition comp_outs  :=
-    set_union L.Lab_eq (pO P1) (pO P2).
 
-  Definition comp_hiddens  := 
-    set_union L.Lab_eq (pH P1) (pH P2).
+  Definition comp_hiddens l := 
+    pH P1 l || pH P2 l || (pI P1 l && pO P2 l) || (pO P1 l && pI P2 l).
 
   Definition comp_trans p l :=
     match (trans P1 (fst p) l, trans P2 (snd p) l) with
@@ -184,209 +199,203 @@ Section CompPIOA.
   Definition compPIOA : PIOA :=
     mkPIOA ((pQ P1) * (pQ P2)) comp_ins comp_outs comp_hiddens comp_start comp_trans.
 
+  Hint Rewrite negb_false_iff.
+  Hint Rewrite negb_true_iff.
+  Hint Rewrite negb_orb.
+  Hint Rewrite negb_andb.
+  Hint Rewrite negb_involutive.
+  Hint Rewrite orb_false_elim.
+  Hint Rewrite andb_true_iff.
+  Hint Rewrite andb_false_iff.
+  Hint Rewrite orb_true_iff.
+  Hint Rewrite orb_false_iff.
+
+  Ltac exists_some := match goal with
+                      | [ |- exists c, Some ?b = Some c] => exists ?b
+                      | [ |- exists c, Some c = Some ?b] => exists ?b
+                      end.
+
                                     
   Instance compWf : forall (w1 : wfPIOA P1) (w2 : wfPIOA P2), wfPIOA compPIOA.
   econstructor.
   simpl.
-  unfold set_pairwise_disjoint.
-  unfold allpairs.
-  simpl.
-  repeat split.
-  unfold comp_ins, comp_outs.
-  intro; intro.
-  apply set_inter_elim in H0.
-  rewrite set_diff_iff in H0; destruct H0.
-  destruct H0.
-  crush.
-
-  unfold comp_ins, comp_hiddens.
-  intro; intro.
-  apply set_inter_elim in H0.
-  rewrite set_diff_iff in H0; destruct H0.
-  destruct H0.
-  apply set_union_elim in H0.
-  apply set_union_elim in H1.
-  destruct H0; destruct H1.
-
-  destruct w1 as [w _ _].
-  unfold set_pairwise_disjoint in w.
-  unfold allpairs in w; simpl in w.
-  destruct w.
-  destruct H3.
-  apply (H5 x).
-  apply set_inter_intro; crush.
-
-  destruct H as [_ _ cH].
-  apply (cH x).
-  apply set_inter_intro. 
-  crush.
-  unfold action.
-  apply set_union_intro; left; crush.
-
-  destruct H as [_ cH _].
-  apply (cH x).
-  apply set_inter_intro. 
-  crush.
-  unfold action.
-  apply set_union_intro; left; crush.
-
-  destruct w2 as [w _ _].
-  unfold set_pairwise_disjoint in w.
-  unfold allpairs in w; simpl in w.
-  destruct w.
-  destruct H3.
-  apply (H5 x).
-  apply set_inter_intro; crush.
-
-  unfold comp_outs, comp_hiddens.
-  unfold set_disjoint; intro; intro.
-  apply set_inter_elim in H0; destruct H0.
-
-  apply set_union_elim in H0.
-  apply set_union_elim in H1.
-  destruct H0; destruct H1.
-
-  destruct w1 as [w _ _].
-  unfold set_pairwise_disjoint in w.
-  unfold allpairs in w; simpl in w.
-  destruct w.
-  apply (H3 x).
-  apply set_inter_intro; crush.
+  unfold pairwise_disjoint.
+  intro x.
+  destruct H; unfold disjoint in *.
+  destruct w1 as [w1 _ _]; unfold pairwise_disjoint in w1; pose proof (w1 x); clear w1.
+  destruct w2 as [w2 _ _]; unfold pairwise_disjoint in w2; pose proof (w2 x); clear w2.
+  unfold comp_ins, comp_outs, comp_hiddens.
+  admit.
   
-  destruct H as [_ _ cH].
-  apply (cH x).
-  apply set_inter_intro. 
-  crush.
-  unfold action.
-  apply set_union_intro; right; apply set_union_intro; crush.
-
-  destruct H as [_ cH _].
-  apply (cH x).
-  apply set_inter_intro. 
-  crush.
-  unfold action.
-  apply set_union_intro; right; apply set_union_intro; crush.
-
-
-  destruct w2 as [w _ _].
-  unfold set_pairwise_disjoint in w.
-  unfold allpairs in w; simpl in w.
-  destruct w.
-  apply (H3 x).
-  apply set_inter_intro; crush.
-
   intros.
+  destruct w1 as [_ w1 _].
+  destruct w2 as [_ w2 _].
   simpl in H0.
   unfold comp_ins in H0.
-  simpl.
-
+  unfold trans; simpl.
   unfold comp_trans.
-  destruct (set_In_dec L.Lab_eq l (pI P1)).
-  simpl in q.
-  destruct (input_enabled (fst q) l s) as [ia1 ia2].
-  rewrite ia2.
-  destruct (trans P2 (snd q) l).
-  exists (x <- ia1; y <- d; ret (x,y)); crush.
-  exists (x <- ia1; ret (x, snd q)); crush.
+  
+  rewrite andb_true_iff in H0; destruct H0.
+  remember (pI P1 l) as b1.
+  remember (pI P2 l) as b2.
+  destruct b1; destruct b2; symmetry in Heqb1; symmetry in Heqb2.
 
+  destruct (w1 (fst q) _ Heqb1).
+  destruct (w2 (snd q) _ Heqb2).
+  rewrite H2; rewrite H3; simpl.
+  exists (x1 <- x; y <- x0; ret (x1, y)); crush.
+
+  destruct (w1 (fst q) _ Heqb1).
+  rewrite H2.
+  destruct (trans P2 (snd q) l).
+  exists (x0 <- x; y <- d; ret (x0, y)); crush.
+  exists (x0 <- x; ret (x0, snd q)); crush.
+
+  destruct (w2 (snd q) _ Heqb2).
+  rewrite H2.
   destruct (trans P1 (fst q) l).
-  destruct (trans P2 (snd q) l).
-  exists (x <- d; y <- d0; ret (x,y)); crush.
-  exists (x <- d; ret (x, snd q)); crush.
+  exists (x0 <- d; y <- x; ret (x0, y)); crush.
+  exists (x0 <- x; ret (fst q, x0)); crush.
+  simpl in H0.
+  crush.
 
-  destruct (set_In_dec L.Lab_eq l (pI P2)).
-  destruct (input_enabled (snd q) l s) as [H6 H7].
-  rewrite H7.
-  exists (x <- H6; ret (fst q, x)); crush.
-  apply set_diff_elim1 in H0.
-  apply set_union_elim in H0.
-  destruct H0; crush.
 
   intros.
-  simpl.
+  destruct w1 as [wf1 ia1 w1].
+  destruct w2 as [wf2 ia2 w2].
+  destruct H.
+  split; intros.
   simpl in H0.
   unfold comp_trans in H0.
-  remember (trans P1 (fst q) l).
-  remember (trans P2 (snd q) l).
-  symmetry in Heqo; symmetry in Heqo0.
+
+  remember (trans P1 (fst q) l); symmetry in Heqo.
   destruct o.
-  destruct w1 as [w11 w12 w13].
-  destruct (w13 _ _ _ Heqo).
+  apply w1 in Heqo.
+  destruct Heqo.
+  remember (pO P2 l) as b; destruct b.
+  right; right; simpl.
+  unfold comp_hiddens.
+  cut (pI P1 l && pO P2 l = true).
+  intro HH; rewrite HH; crush.
+  crush.
+  left; simpl; unfold comp_ins.
+  rewrite H1. rewrite <- Heqb.
+  simpl.
+  cut (pO P1 l = false).
+  intro HH; crush.
+  destruct (wf1 l).
+  crush.
+  destruct H1.
+  remember (pI P2 l) as b; destruct b.
+  right; right; simpl; unfold comp_hiddens.
+  cut (pO P1 l && pI P2 l = true); crush.
+  right; left; simpl; unfold comp_outs.
+  rewrite H1. rewrite <- Heqb.
+  simpl.
+  destruct (wf1 l).
+  cut (pI P1 l = false); crush.
+  right; right; simpl; unfold comp_hiddens; rewrite H1; crush.
 
-  destruct o0.
-  destruct w2 as [w21 w22 w23].
-  destruct (w23 _ _ _ Heqo0).
-  left; unfold comp_ins.
-  rewrite set_diff_iff.
+  remember (trans P2 (snd q) l); symmetry in Heqo0.
+  destruct o.
+  apply w2 in Heqo0.
+  destruct Heqo0.
+  remember (pO P1 l) as b; destruct b.
+  right; right; simpl.
+  unfold comp_hiddens.
+  cut (pO P1 l && pI P2 l = true); crush.
+  left; simpl; unfold comp_ins.
+
+  rewrite H1; rewrite <- Heqb.
+  rewrite orb_true_r.
+  simpl.
+  destruct (wf2 l).
+  cut (pO P2 l = false); crush.
+  destruct H1.
+  remember (pI P1 l) as b; destruct b.
+  right; right; simpl; unfold comp_hiddens; simpl.
+  cut (pI P1 l && pO P2 l = true); crush.
+  right; left; simpl; unfold comp_outs.
+  rewrite H1; rewrite <- Heqb.
+  rewrite orb_true_r.
+  simpl.
+  destruct (wf2 l); crush.
+  right; right; simpl; unfold comp_hiddens; crush.
+  crush.
+  simpl; unfold comp_trans.
+  destruct H0.
+  destruct H1.
+  simpl in *.
+  unfold comp_ins, comp_outs, comp_hiddens in *.
+  cut (trans P1 (fst q) l = None /\ trans P2 (snd q) l = None).
+  crush.
   split.
-  apply set_union_intro; crush.
-  intro.
-  apply set_union_elim in H3; destruct H3.
 
-  unfold set_pairwise_disjoint, allpairs in w11; simpl in w11.
-  destruct w11.
-  destruct H4.
-  destruct H4.
-  apply (H7 l).
-  apply set_inter_intro; crush.
-
-  unfold set_pairwise_disjoint, allpairs in w21; simpl in w21.
-  destruct w21.
-  destruct H4.
-  destruct H4.
-  apply (H7 l).
-  apply set_inter_intro; crush.
-
-  destruct H2.
-  right; left; unfold comp_outs; apply set_union_intro; crush.
-  right; right; unfold comp_outs; apply set_union_intro; crush.
-
-  destruct (set_In_dec L.Lab_eq l (pO P2)).
-  right; left; unfold comp_outs; apply set_union_intro; crush.
-  left; unfold comp_ins.
-  apply set_diff_iff; split.
-  apply set_union_intro; crush.
-  intro.
-  apply set_union_elim in H2; destruct H2.
-
-  unfold set_pairwise_disjoint, allpairs in w11; simpl in w11.
-  destruct w11 as [[[_ w] _] _].
-  apply (w l).
-  apply set_inter_intro; crush.
+  apply w1.
+  apply (x <- c; ret (fst x)).
+  split.
+  remember (pI P1 l) as b; destruct b; symmetry in Heqb.
+  remember (pO P2 l) as b2; destruct b2; symmetry in Heqb2.
+  simpl in *.
   crush.
+  simpl in *.
+  remember (pO P1 l) as b3; destruct b3; symmetry in Heqb3.
 
-  destruct H1.
-  right; left; unfold comp_outs; apply set_union_intro; crush.
-  right; right; unfold comp_hiddens; apply set_union_intro; crush.
-
-  destruct o0.
-  destruct w2.
-  destruct (trans_wf0 _ _ _ Heqo0).
-  destruct (set_In_dec L.Lab_eq l (pO P1)).
-  right; left; unfold comp_outs; apply set_union_intro; crush.
-  left; unfold comp_ins; apply set_diff_iff; split.
-  apply set_union_intro; crush.
-  intro.
-  apply set_union_elim in H2.
-  destruct H2.
+  destruct (wf1 l); crush.
+  simpl in *.
   crush.
-
-  unfold set_pairwise_disjoint, allpairs in disjoint0; simpl in disjoint0.
-  destruct disjoint0.
-  destruct H3.
-  destruct H3.
-  apply (H6 l).
-  apply set_inter_intro; crush.
-
-  destruct H1.
-  right; left; unfold comp_outs; apply set_union_intro; crush.
-  right; right; unfold comp_outs; apply set_union_intro; crush.
   crush.
-  Defined.
+  split.
+
+  remember (pO P1 l) as b; destruct b; symmetry in Heqb.
+  remember (pO P2 l) as b2; destruct b2; symmetry in Heqb2.
+  crush.
+  simpl in *.
+  remember (pI P1 l) as b3; destruct b3; symmetry in Heqb3.
+  destruct (wf1 l); crush.
+  crush.
+  crush.
+  destruct (pH P1 l).
+  simpl in H2.
+  crush.
+  crush.
+  
+  apply w2.
+  apply (x <- c; ret (snd x)).
+  split.
+  remember (pI P2 l) as b; destruct b; symmetry in Heqb.
+  remember (pO P1 l) as b2; destruct b2; symmetry in Heqb2.
+  simpl in *.
+  crush.
+  simpl in *.
+  remember (pO P2 l) as b3; destruct b3; symmetry in Heqb3.
+
+  destruct (wf2 l); crush.
+  simpl in *.
+  crush.
+  crush.
+  split.
+
+  remember (pO P2 l) as b; destruct b; symmetry in Heqb.
+  remember (pO P1 l) as b2; destruct b2; symmetry in Heqb2.
+  crush.
+  simpl in *.
+  remember (pI P2 l) as b3; destruct b3; symmetry in Heqb3.
+  destruct (wf2 l); crush.
+  crush.
+  crush.
+  destruct (pH P2 l).
+  simpl in H2.
+  crush.
+  crush.
+  Admitted.
+  
+  
 End CompPIOA.
 
 
 
-Notation "x ||| y" := (compPIOA x y) (at level 51, right associativity).
 
 End PIOADef.
+
+Notation "x |+| y" := (@compPIOA _ x y) (at level 51, right associativity).
