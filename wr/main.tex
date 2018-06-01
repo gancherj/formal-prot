@@ -32,8 +32,8 @@ Given two comparable (not necessarily closed) task-structured PIOAs $P$ and $P'$
     \item for all $t$, $\phi_S (\lst\ t) = \lst\ (\phi_T\ t)$
     \item for all $t$, $\tr\ t = \tr\ (\phi_T\ t)$
     \item for all $s$ and tasks $T$, $T$ is enabled in $s$ iff $C(T)$ is enabled in $\phi_S\ s$
-    \item for all tasks $T$ and states $s$ enabled in $T$, $\phi_T (Ts) = C(T)\ (\phi_S\ s)$
-    \item for all input actions $i$, $\phi_t\ (i s) = i (\phi_S s)$.
+    \item for all tasks $T$ and states $s$ such that $a \in T$ is enabled in $s$, $\D(\phi_T) (as) = C(T)\ (\phi_S\ s)$
+    \item for all input actions $i$, $\phi_t (s \xrightarrow{i} s') = (\phi_S s) \xrightarrow{i} (\phi_S s')$.
 \end{enumerate}
 
 \begin{theorem}
@@ -50,6 +50,8 @@ The above is proved in two parts:
 \end{lemma}
 
 \section{Soundness}
+TODO verify I use condition 6 and 7 correctly
+
 Let $(\phi_S, \phi_T, C)$ be a state simulation from $P$ to $P'$. Define $\overline{\phi} : \Frag_P \to \Frag_{P'}$ such that $\overline{\phi}(s) = \phi_S\ s$, and otherwise inductively by 
 \[\overline{\phi}\ \alpha = \begin{cases}
         \phi_T\ (s \xrightarrow{a} s') & \text{ if $\alpha = s \xrightarrow{a} s'$ } \\
@@ -61,7 +63,7 @@ Define the simulation relation $R \subseteq \D(\Exec\ P) \times \D(\Exec\ P')$ t
 Now, we must verify that the step condition for $R$ holds. Choose the task correspondence $C$ to be that in the state simulation. Lift $C$ to operate on task sequences, by concatenating each image. Suppose that $\mu\ R\ \eta$ (i.e., that $\D(\overline{\phi})\ \mu = \eta$), $\mu$ is consistent with $\sigma$, $\eta$ is consistent with $C(\sigma)$. Then we must verify that for all $T$, $\D(\overline{\phi})(T\ \mu) = C(T)\ \eta$; that is, we must show that $\D(\overline{\phi})(T\ \mu) = C(T)\ \D(\overline{\phi})\ \mu$.
 
 \begin{lemma}
-    For all execution fragments $\alpha$ such that $T$ is enabled in $\lst\ \alpha$, $\overline{\phi}(T \alpha) = C(T) (\overline{\phi}\ \alpha)$.
+    For all execution fragments $\alpha$ such that $T$ is enabled in $\lst\ \alpha$, $\D(\overline{\phi})(T \alpha) = C(T) (\overline{\phi}\ \alpha)$.
 \end{lemma}
 
 The above follows from condition 6 in the definition of a state simulation.
@@ -91,7 +93,7 @@ Let $(\phi_S, \phi_T, C)$ be a state simulation from $P$ to $P'$, and let $E$ be
     \phi'_T ((s,t) \xrightarrow{a} (s', t')) &=
         \begin{cases}
             \mathsf{lift}_t^{t'} (\phi_T (s \xrightarrow{a} s')) & \text{ if $a$ is enabled in $s$ } \\
-            (s,t) \xrightarrow{a} (s', t') & \text{ otherwise } 
+            (\phi_S\ s,t) \xrightarrow{a} (\phi_S\ s', t') & \text{ otherwise } 
         \end{cases} \\
     C' T &= \begin{cases}
         C(T) & \text{ if $T \in \Task_P$ } \\
@@ -99,7 +101,65 @@ Let $(\phi_S, \phi_T, C)$ be a state simulation from $P$ to $P'$, and let $E$ be
     \end{cases}
 \end{align*}
 
-where $\mathsf{lift}_t^{t'}\ \alpha$ lifts each transition in $\Tr_{P'}$ to a transition in $\Tr_{P' || E}$, such that $t$ is the initial state of $E$ and $t'$ is the final state. This is always possible, since we know that $(s,t) \xrightarrow{a} (s', t')$ and that $\phi_T$ only schedules hidden actions, except possibly action $a$ if $a$ is an external action.
+where $\mathsf{lift}_t^{t'}\ \alpha$ lifts each transition in $\Tr_{P'}$ to a transition in $\Tr_{P' || E}$, such that $t$ is the initial state of $E$ and $t'$ is the final state. This is always possible, since we know that $(s,t) \xrightarrow{a} (s', t')$ and that $\phi_T$ only schedules hidden actions in $P'$, except possibly a single external action which must be enabled in $t$.
+
+We must now verify the conditions for $(\phi'_S, \phi'_T, C')$ to be a state simulation. Conditions 1-5 are immediate. 
+
+For condition 7, compute that
+\begin{align*}
+    \phi'_T ((s,t) \xrightarrow{i} (s',t')) &= \mathsf{lift}_t^{t'} \phi_T (s \xrightarrow{i} s') \text{ by input enabledness } \\
+     &= \mathsf{lift}_t^{t'} (\phi_S\ s) \xrightarrow{i} (\phi_S\ s') \text{ by condition 7 on $\phi_T$ } \\
+     &= (\phi_S\ s, t) \xrightarrow{i} (\phi_S\ s', t') \\
+     &= \phi'_S (s,t) \xrightarrow{i} \phi'_S (s', t').
+ \end{align*}
+
+Now, we need to verify that for all tasks $T \in \Task_{P || E}$ and joint states $(s,t)$ such that $T$ is enabled in $(s,t)$, 
+\[\D(\phi'_T)(T(s,t)) = C'(T) (\phi'_S\ (s,t)).\]
+
+If $T \in \Task_P$ and $Ts$ induces an action $a$ such that $a$ is enabled in $t$, then we need to check that
+\[\D(\phi'_T)(a (s,t)) = C(T) (\phi_S\ s, t).\]
+
+Since actions operate separately on each component, we get that $a (s,t) = \sum_i \sum_j p_i p'_j (s,t) \xrightarrow{a} (s_i, t_j)$, so that
+
+\begin{align*}
+    \D(\phi'_T)(\sum_i \sum_j p_i p'_j (s,t) \xrightarrow{a} (s_i, t_j)) &=
+         \sum_i \sum_j p_i p'_j \phi'_T ((s,t) \xrightarrow{a} (s_i, t_j)) \\
+      &= \sum_j p'_j \D(\mathsf{lift}_t^{t_j}) \sum_i \phi_T (s \xrightarrow{a} s_i) \\
+      &= \sum_j p'_j \D(\mathsf{lift}_t^{t_j}) C(T) (\phi_S\ s) \\
+      &= C(T) (\phi_S\ s, t).
+\end{align*}
+
+If $a$ is not enabled in $t$, then similarly compute that
+\begin{align*}
+    \D(\phi'_T)(\sum_i p_i (s,t) \xrightarrow{a} (s_i, t)) &=
+      &= \D(\mathsf{lift}_t^{t}) \sum_i \phi_T (s \xrightarrow{a} s_i) \\
+      &= \D(\mathsf{lift}_t^{t}) C(T) (\phi_S\ s) \\
+      &= C(T) (\phi_S\ s, t).
+\end{align*}
+
+If $T \in \Task_E$ and $Tt$ induces an action $a$ such that $a$ is enabled in $s$, we must check that
+\[\D(\phi'_T)(T (s,t)) = T (\phi_S\ s, t).\]
+
+As above, write $a (s,t) = \sum_i \sum_j p_i p'_j (s,t) \xrightarrow{a} (s_i, t_j)$ so that
+\begin{align*}
+    \D(\phi'_T)(\sum_i \sum_j p_i p'_j (s,t) \xrightarrow{a} (s_i, t_j)) &=
+         \sum_i \sum_j p_i p'_j \phi'_T ((s,t) \xrightarrow{a} (s_i, t_j)) \\
+    &= \sum_i \sum_j p_i p'_j \mathsf{lift}_t^{t_j} \phi_T (s \xrightarrow{a} s_i).
+  \end{align*}
+Now, since $a$ arises from a task in $E$, $a$ must be an input action for $s$, thus we get
+\begin{align*}
+    \sum_i \sum_j p_i p'_j \mathsf{lift}_t^{t_j} \phi_T (s \xrightarrow{a} s_i) &= \sum_i \sum_j p_i p'_j \mathsf{lift}_t^{t_j} (\phi_S s) \xrightarrow{a} (\phi_S\ s_i) \\
+    &= \sum_i \sum_j p_i p'_j (\phi_S\ s, t) \xrightarrow{a} (\phi_S\ s_i, t_j) \\
+    &= T (\phi_S\ s, t).
+\end{align*}.
+
+Finally, if $a$ is not enabled in $s$, write $a (s,t) = \sum_j p'_j (s,t) \xrightarrow{a} (s, t_j)$ so that
+\begin{align*}
+    \D(\phi'_T)(\sum_j p'_j (s,t) \xrightarrow{a} (s, t_j)) &= \sum_j p'_j \phi'_T ((s,t) \xrightarrow{a} (s, t_j)) \\
+    &= \sum_j p'_j ((s,t) \xrightarrow{a} (s, t_j)) \text{ since $a$ is disabled in $s$ } \\
+    &= T (\phi_S\ s,t).
+\end{align*}
+
 
 
 
