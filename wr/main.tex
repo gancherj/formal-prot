@@ -21,7 +21,7 @@
 \maketitle
 
 Given a PIOA $P$, let $\Tr_P$ be the set of all valid transitions of $P$: transitions $s \xrightarrow{a} t$ such that $t \in \supp(\tr\ s\ a)$. Given a task $T$ and a state $s$ such that $T$ is enabled in $s$, write $Ts$ to be the induced distribution on $\Tr_P$. (By input enabledness, we
-may also write $is$ for any input action $i$ to be the corresponding induced distribution.) Lift this to execution fragments $\alpha$ such that $T$ is enabled in $\lst \alpha$ in the obvious way. Then, lift this to distributions of execution fragments $\mu$, by sampling $\alpha$ from $\mu$, and returning $T\ \alpha$ if $T$ is enabled in $\lst \alpha$, and $\alpha$ otherwise. (Note by this definition, $T\ \mu$ is equal to $\textsf{apply}(T, \mu)$.)
+may also write $is$ for any input action $i$ to be the corresponding induced distribution.) Lift this to execution fragments $\alpha$ such that $T$ is enabled in $\lst\ \alpha$ in the obvious way. Then, lift this to distributions of execution fragments $\mu$, by sampling $\alpha$ from $\mu$, and returning $T\ \alpha$ if $T$ is enabled in $\lst\ \alpha$, and $\alpha$ otherwise. (Note by this definition, $T\ \mu$ is equal to $\textsf{apply}(T, \mu)$.)
 
 Given a task sequence $\sigma$, say that $\sigma$ is disabled in $s$ if all tasks in $\sigma$ are disabled in $s$, and that $\sigma$ is enabled in $s$ if there exists a task in $\sigma$ enabled in $s$.
 
@@ -31,8 +31,8 @@ Given two comparable (not necessarily closed) task-structured PIOAs $P$ and $P'$
     \item for all $t \in \Tr_P$, $\phi_S (\fst\ t) = \fst\ (\phi_T\ t)$
     \item for all $t$, $\phi_S (\lst\ t) = \lst\ (\phi_T\ t)$
     \item for all $t$, $\tr\ t = \tr\ (\phi_T\ t)$
-    \item for all $s$ and tasks $T$, $T$ is enabled in $s$ iff $C(T)$ is enabled in $\phi_S\ s$
-    \item for all tasks $T$ and states $s$ such that $a \in T$ is enabled in $s$, $\D(\phi_T) (as) = C(T)\ (\phi_S\ s)$
+    \item for all $s$ and tasks $T$, $T$ is enabled in $s$ implies $C(T)$ is enabled in $\phi_S\ s$
+    \item for all tasks $T$ and states $s$ such that $a \in T$ is enabled in $s$, $\D(\phi_T) (Ts) = \D(\phi_T) (as) = C(T)\ (\phi_S\ s)$
     \item for all input actions $i$, $\phi_t (s \xrightarrow{i} s') = (\phi_S s) \xrightarrow{i} (\phi_S s')$.
 \end{enumerate}
 
@@ -50,7 +50,6 @@ The above is proved in two parts:
 \end{lemma}
 
 \section{Soundness}
-TODO verify I use condition 6 and 7 correctly
 
 Let $(\phi_S, \phi_T, C)$ be a state simulation from $P$ to $P'$. Define $\overline{\phi} : \Frag_P \to \Frag_{P'}$ such that $\overline{\phi}(s) = \phi_S\ s$, and otherwise inductively by 
 \[\overline{\phi}\ \alpha = \begin{cases}
@@ -76,11 +75,11 @@ The above follows from condition 6 in the definition of a state simulation.
     \[T\ \mu = \sum_i p_i \cdot \begin{cases} T\ \alpha_i & \text{ if $T$ is enabled in $\lst\ \alpha_i$} \\
                                         \alpha_i & \text{ otherwise } \end{cases} \] 
     thus
-    \[\D(\overline{\phi})(T\ \mu) = \sum_i p_i \begin{cases} \overline{\phi}\ (T\ \alpha_i) & \text{ if $T$ is enabled in $\lst\ \alpha_i$} \\
+    \[\D(\overline{\phi})(T\ \mu) = \sum_i p_i \begin{cases} \D(\overline{\phi})\ (T\ \alpha_i) & \text{ if $T$ is enabled in $\lst\ \alpha_i$} \\
             \overline{\phi}\ \alpha_i & \text{ otherwise } \end{cases} \] 
 
     By conditions 3, 5 and 6 in the state simulation, this is equal to
-    \[\sum_i p_i \begin{cases} C(T) (\overline{\phi}\ \alpha_i)  & \text{ if $C(T)$ is enabled in $\overline{\phi}\ \alpha_i$} \\
+    \[\sum_i p_i \begin{cases} C(T) (\overline{\phi}\ \alpha_i)  & \text{ if $C(T)$ is enabled in $\phi_S (\lst\ \alpha_i) = \lst\ \overline{\phi}\ \alpha_i$} \\
             \overline{\phi}\ \alpha_i & \text{ otherwise } \end{cases} \] 
     which is equal to $C(T)\ (\D(\overline{\phi})\ \mu)$.
 
@@ -132,7 +131,7 @@ Since actions operate separately on each component, we get that $a (s,t) = \sum_
 If $a$ is not enabled in $t$, then similarly compute that
 \begin{align*}
     \D(\phi'_T)(\sum_i p_i (s,t) \xrightarrow{a} (s_i, t)) &=
-      &= \D(\mathsf{lift}_t^{t}) \sum_i \phi_T (s \xrightarrow{a} s_i) \\
+      \D(\mathsf{lift}_t^{t}) \sum_i p_i \phi_T (s \xrightarrow{a} s_i) \\
       &= \D(\mathsf{lift}_t^{t}) C(T) (\phi_S\ s) \\
       &= C(T) (\phi_S\ s, t).
 \end{align*}
